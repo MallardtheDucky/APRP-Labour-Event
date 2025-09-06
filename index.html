@@ -7,162 +7,169 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet"/>
   <style>
-    body { margin: 0; padding: 0; font-family: sans-serif; }
+    body { margin:0; padding:0; font-family:sans-serif; }
+    #map { position:absolute; top:180px; bottom:0; width:100%; transition:top 0.3s ease; }
     #header {
-      position: absolute; top: 0; left: 0; right: 0;
-      background: #222; color: white;
-      padding: 15px 20px; z-index: 1000;
-      display: flex; flex-direction: column;
-      align-items: center; height: 200px;
-      overflow: hidden; transition: transform 0.3s ease;
+      position:absolute; top:0; left:0; right:0;
+      background:#222; color:white; padding:15px 20px;
+      z-index:1000; display:flex; flex-direction:column; align-items:center;
+      height:180px; overflow:hidden; transition:transform 0.3s ease;
     }
-    #header.hidden { transform: translateY(-100%); }
-    .title { font-size: 26px; font-weight: bold; margin-bottom: 10px; }
+    #header.hidden { transform:translateY(-100%); }
+    #map.full { top:0; }
+    .title { font-size:26px; font-weight:bold; margin-bottom:15px; text-align:center; }
     .metrics-container {
-      display: flex; flex-wrap: wrap;
-      justify-content: center; gap: 25px; max-width: 1000px;
+      display:flex; flex-wrap:wrap; justify-content:center; gap:40px;
+      max-width:1000px;
     }
-    .metric-group { display: flex; flex-direction: column; align-items: center; min-width: 150px; }
-    .metric-label { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-    .metric-value { font-size: 18px; color: #00e676; }
-    #toggle-header, #toggle-header-map {
-      position: absolute; background: none; border: none;
-      color: white; font-size: 24px; cursor: pointer;
-      transition: transform 0.3s ease; z-index: 1001;
+    .metric { text-align:center; }
+    .metric-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
+    .metric-value { font-size:18px; color:#00ff00; margin-top:4px; }
+    #toggle-header {
+      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+      background:none; border:none; color:white; font-size:24px;
+      cursor:pointer; transition:transform 0.3s ease;
     }
-    #toggle-header { bottom: 10px; left: 50%; transform: translateX(-50%); }
-    #toggle-header.up { transform: translateX(-50%) rotate(180deg); }
+    #toggle-header.up { transform:translateX(-50%) rotate(180deg); }
     #toggle-header-map {
-      top: 10px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 5px;
-      display: none;
+      position:absolute; top:10px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.7); border:none; color:white;
+      font-size:24px; cursor:pointer; padding:5px 10px;
+      border-radius:5px; z-index:1000; display:none;
     }
-    #toggle-header-map.down { transform: translateX(-50%) rotate(180deg); }
-    #header.hidden + #map #toggle-header-map { display: block; }
-
-    #map { position: absolute; top: 200px; bottom: 0; width: 100%; transition: top 0.3s ease; }
-    #map.full { top: 0; }
-
-    /* Legend styling */
+    #toggle-header-map.down { transform:translateX(-50%) rotate(180deg); }
+    #header.hidden + #map #toggle-header-map { display:block; }
     .legend {
-      position: absolute; bottom: 30px; right: 10px;
-      background: white; padding: 10px; font-size: 12px;
-      border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-      line-height: 18px;
-      z-index: 1000;
+      position:absolute; bottom:20px; right:20px; background:white;
+      padding:10px; border-radius:5px; font-size:12px;
     }
-    .legend-color {
-      display: inline-block;
-      width: 12px; height: 12px;
-      margin-right: 5px; vertical-align: middle;
+    .legend div { margin:4px 0; }
+    .legend span {
+      display:inline-block; width:12px; height:12px; margin-right:6px;
     }
   </style>
 </head>
 <body>
   <div id="header">
     <div class="title">Live Labour Strikes Map</div>
-    <div class="metrics-container" id="metrics"></div>
+    <div class="metrics-container" id="metrics">
+      <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">0</div></div>
+      <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">0</div></div>
+      <div class="metric"><div class="metric-label">Confidence Index</div><div class="metric-value" id="conf">0</div></div>
+      <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">0</div></div>
+      <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">0</div></div>
+    </div>
     <button id="toggle-header" title="Toggle header visibility">▲</button>
   </div>
+
   <div id="map">
     <button id="toggle-header-map" title="Toggle header visibility">▼</button>
-    <div class="legend" id="legend">
-      <div><span class="legend-color" style="background: #cccccc;"></span>No strikes</div>
-      <div><span class="legend-color" style="background: #f4a6a6;"></span>Low strike %</div>
-      <div><span class="legend-color" style="background: #d12c0f;"></span>High strike %</div>
-    </div>
+  </div>
+
+  <div class="legend">
+    <div><span style="background:#cccccc"></span>No strikes</div>
+    <div><span style="background:#f4a6a6"></span>Low strike %</div>
+    <div><span style="background:#d12c0f"></span>High strike %</div>
   </div>
 
   <script>
     mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
+
     const map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/light-v10',
-      center: [-98.5795, 39.8283],
-      zoom: 3
+      container:'map',
+      style:'mapbox://styles/mapbox/light-v10',
+      center:[-98.5795,39.8283],
+      zoom:3
     });
 
-    const header = document.getElementById('header');
-    const mapDiv = document.getElementById('map');
-    const btnHeader = document.getElementById('toggle-header');
-    const btnMap = document.getElementById('toggle-header-map');
+    // Toggle header
+    const header=document.getElementById('header');
+    const mapDiv=document.getElementById('map');
+    const toggleButton=document.getElementById('toggle-header');
+    const toggleButtonMap=document.getElementById('toggle-header-map');
 
     function toggleHeader() {
       header.classList.toggle('hidden');
       mapDiv.classList.toggle('full');
-      btnHeader.classList.toggle('up');
-      btnMap.classList.toggle('down');
-      btnHeader.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
-      btnMap.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
+      toggleButton.classList.toggle('up');
+      toggleButtonMap.classList.toggle('down');
+      toggleButton.innerHTML=header.classList.contains('hidden')?'▼':'▲';
+      toggleButtonMap.innerHTML=header.classList.contains('hidden')?'▼':'▲';
       map.resize();
     }
+    toggleButton.addEventListener('click',toggleHeader);
+    toggleButtonMap.addEventListener('click',toggleHeader);
 
-    btnHeader.addEventListener('click', toggleHeader);
-    btnMap.addEventListener('click', toggleHeader);
-
-    map.on('load', async () => {
+    // Fetch and load map data
+    map.on('load',async()=>{
       try {
-        const res = await fetch('https://script.google.com/macros/s/AKfycbwGj6JSMumK1BGaXJGJ5KJJjVgj4sBkyY65EKwQvtM2_xfmUzSkuz3OYY4Hd3-p5XZilg/exec');
-        if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-        const data = await res.json();
-        console.log("Fetched data:", data);
+        const res=await fetch('https://script.google.com/macros/s/AKfycbwGj6JSMumK1BGaXJGJ5KJJjVgj4sBkyY65EKwQvtM2_xfmUzSkuz3OYY4Hd3-p5XZilg/exec');
+        const data=await res.json();
 
-        if (data.error) throw new Error(data.error);
+        // Split metrics & polygons
+        const regionFeatures=data.features.filter(f=>f.properties.sheet==='StrikeTracker');
+        const impactFeatures=data.features.filter(f=>f.properties.sheet==='ECONOMIC IMPACT');
 
-        // Populate header metrics
-        const metricsDiv = document.getElementById('metrics');
-        (data.economicImpact || []).forEach(item => {
-          const div = document.createElement('div');
-          div.className = 'metric-group';
-          div.innerHTML = `<div class="metric-label">${item.metric}</div><div class="metric-value">${item.current_value}</div>`;
-          metricsDiv.appendChild(div);
+        // Update metrics bar
+        impactFeatures.forEach(f=>{
+          const m=f.properties.metric.toLowerCase();
+          const v=f.properties.current_value;
+          if(m.includes('productivity')) document.getElementById('prod').textContent=v;
+          else if(m.includes('closing')) document.getElementById('close').textContent=v;
+          else if(m.includes('confidence')) document.getElementById('conf').textContent=v;
+          else if(m.includes('inflation')) document.getElementById('infl').textContent=v;
+          else if(m.includes('wage')) document.getElementById('wage').textContent=v;
         });
 
-        // Add strike regions source and layers
-        map.addSource('regions', { type: 'geojson', data });
+        map.addSource('regions',{type:'geojson',data});
+
         map.addLayer({
-          id: 'regions-fill',
-          type: 'fill',
-          source: 'regions',
-          paint: {
-            'fill-color': [
-              'interpolate', ['linear'], ['to-number', ['get', 'strike_percent'], 0],
-              0, '#cccccc',
-              5, '#f4a6a6',
-              15, '#d12c0f'
+          id:'regions-fill',
+          type:'fill',
+          source:'regions',
+          paint:{
+            'fill-color':[
+              'interpolate',
+              ['linear'],
+              ['to-number',['get','strike_percent'],0],
+              0,'#cccccc',
+              5,'#f4a6a6',
+              15,'#d12c0f'
             ],
-            'fill-opacity': 0.8
-          }
-        });
-        map.addLayer({
-          id: 'regions-outline',
-          type: 'line',
-          source: 'regions',
-          paint: { 'line-color': '#000', 'line-width': 1 }
+            'fill-opacity':0.8
+          },
+          filter:['==',['get','sheet'],'StrikeTracker']
         });
 
-        // Hover popups
-        map.on('mousemove', 'regions-fill', e => {
-          const p = e.features[0].properties;
-          new mapboxgl.Popup({ closeButton: false })
-            .setLngLat(e.lngLat)
+        map.addLayer({
+          id:'regions-outline',
+          type:'line',
+          source:'regions',
+          paint:{'line-color':'#000','line-width':1},
+          filter:['==',['get','sheet'],'StrikeTracker']
+        });
+
+        // Single popup instance
+        const popup=new mapboxgl.Popup({closeButton:false,closeOnClick:false});
+
+        map.on('mousemove','regions-fill',e=>{
+          const p=e.features[0].properties;
+          popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region}</strong><br/>
-              <b>Strikers:</b> ${p.strikers}<br/>
-              <b>Strike % of Population:</b> ${p.strike_percent}%<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output}<br/>
-              <b>Wage Demand ($):</b> ${p.wage_demand}<br/>
-              <b>Notes:</b> ${p.notes || 'None'}
+              <strong>${p.region||'Unknown Region'}</strong><br/>
+              <b>Strikers:</b> ${p.strikers||'N/A'}<br/>
+              <b>Strike % of Population:</b> ${p.strike_percent||'0'}%<br/>
+              <b>Adjusted Output:</b> ${p.adjusted_output||'N/A'}<br/>
+              <b>Wage Demand ($):</b> ${p.wage_demand||'N/A'}<br/>
+              <b>Notes:</b> ${p.notes||'None'}
             `).addTo(map);
         });
-        map.on('mouseleave', 'regions-fill', () => {
-          const popups = document.getElementsByClassName('mapboxgl-popup');
-          if (popups.length) popups[0].remove();
-        });
 
-      } catch (err) {
-        console.error("Error loading map:", err);
-        document.getElementById('map').innerHTML = `<p style="color:red; text-align:center;">Error: ${err.message}</p>`;
+        map.on('mouseleave','regions-fill',()=>popup.remove());
+
+      } catch(err) {
+        console.error('Map load error:',err);
+        document.getElementById('map').innerHTML='<p style="color:red;text-align:center;">Map failed to load</p>';
       }
     });
   </script>
