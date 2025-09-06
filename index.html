@@ -97,11 +97,6 @@
       const num = Number(v);
       return isNaN(num) ? v : num.toFixed(places);
     }
-    function roundNumber(v, decimals=2){
-      const num = Number(v);
-      if (isNaN(num)) return v;
-      return Number(num.toFixed(decimals));
-    }
 
     // Toggle header
     const toggleButton = document.getElementById('toggle-header');
@@ -134,19 +129,17 @@
           else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
-        // Nationwide stats
-        const nationwide = geojson.features.find(f => {
-          const r = (f.properties && (f.properties.region || f.properties.name || '')).toString().trim().toUpperCase();
-          return r === 'NATIONWIDE' || r === 'NATIONAL';
-        });
-        if (nationwide) {
-          const np = nationwide.properties;
-          document.getElementById('nat-strikers').textContent = fmtNumber(np.strikers);
-          document.getElementById('nat-percent').textContent = fmtPercent(np.strike_percent);
-          document.getElementById('nat-wage').textContent = fmtMoney(np.wage_demand);
+        // Nationwide stats (from normalizedData, not geojson)
+        if (data.normalizedData) {
+          const nationwide = data.normalizedData.find(r => r.region && r.region.toString().trim().toUpperCase() === "NATIONWIDE");
+          if (nationwide) {
+            document.getElementById('nat-strikers').textContent = fmtNumber(nationwide.strikers);
+            document.getElementById('nat-percent').textContent = fmtPercent(nationwide.strike_percent);
+            document.getElementById('nat-wage').textContent = fmtMoney(nationwide.wage_demand);
+          }
         }
 
-        // Normalize
+        // Normalize region props
         geojson.features.forEach(f => {
           if (!f.properties) f.properties = {};
           if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
