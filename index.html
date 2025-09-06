@@ -18,13 +18,8 @@
     #header.hidden { transform:translateY(-100%); }
     #map.full { top:0; }
     .title { font-size:26px; font-weight:bold; margin-bottom:8px; text-align:center; }
-    #nationwide {
-      font-size:16px; font-weight:bold; margin-bottom:12px; text-align:center; color:#0ff;
-    }
-    .metrics-container {
-      display:flex; flex-wrap:wrap; justify-content:center; gap:40px;
-      max-width:1000px;
-    }
+    #nationwide { font-size:16px; font-weight:bold; margin-bottom:12px; text-align:center; color:#0ff; }
+    .metrics-container { display:flex; flex-wrap:wrap; justify-content:center; gap:40px; max-width:1000px; }
     .metric { text-align:center; }
     .metric-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
     .metric-value { font-size:18px; color:#00ff00; margin-top:4px; }
@@ -47,9 +42,7 @@
       padding:10px; border-radius:5px; font-size:12px;
     }
     .legend div { margin:4px 0; }
-    .legend span {
-      display:inline-block; width:12px; height:12px; margin-right:6px;
-    }
+    .legend span { display:inline-block; width:12px; height:12px; margin-right:6px; }
   </style>
 </head>
 <body>
@@ -89,7 +82,6 @@
       projection:'mercator'
     });
 
-    // Toggle header
     const header=document.getElementById('header');
     const mapDiv=document.getElementById('map');
     const toggleButton=document.getElementById('toggle-header');
@@ -107,39 +99,39 @@
     toggleButton.addEventListener('click',toggleHeader);
     toggleButtonMap.addEventListener('click',toggleHeader);
 
-    function fmtNum(v){ return v?Number(v).toLocaleString():'0'; }
-    function fmtPercent(v){ return v? (Number(v)*100).toFixed(2)+'%' : '0%'; }
-    function fmtMoney(v){ return v? '$'+Number(v).toLocaleString():'$0'; }
+    function fmtNum(v){ return v ? Number(v).toLocaleString() : '0'; }
+    function fmtPercent(v){ return v != null ? Number(v).toFixed(2)+'%' : '0.00%'; }
+    function fmtMoney(v){ return v ? '$'+Number(v).toLocaleString() : '$0'; }
 
-    // Fetch and load map data
-    map.on('load',async()=>{
+    map.on('load', async () => {
       try {
-        const res=await fetch('https://script.google.com/macros/s/AKfycbz19M1xxK6gUmLlZJ2gACZZu7kqDFbomWSG7P-kMhnv7d0O8VpXIkRqYqM2v5cx4516zg/exec');
-        const data=await res.json();
+        const res = await fetch('https://script.google.com/macros/s/AKfycbz19M1xxK6gUmLlZJ2gACZZu7kqDFbomWSG7P-kMhnv7d0O8VpXIkRqYqM2v5cx4516zg/exec');
+        const data = await res.json();
 
-        // Update Nationwide totals
-        if(data.nationwide){
-          const nat=data.nationwide;
-          document.getElementById('nationwide').innerHTML=
-            `Nationwide Totals — Strikers: ${fmtNum(nat.strikers)}, Strike %: ${fmtPercent(nat.strike_percent)}, Wage Demand: ${fmtMoney(nat.wage_demand)}`;
-        } else {
-          document.getElementById('nationwide').textContent="Nationwide Totals: N/A";
+        // Nationwide totals
+        if(data.geojson && data.geojson.features){
+          const nationwide = data.geojson.features.find(f => f.properties.region === 'NATIONWIDE');
+          if(nationwide){
+            const nat = nationwide.properties;
+            document.getElementById('nationwide').innerHTML =
+              `Nationwide — Strikers: ${fmtNum(nat.strikers)}, Strike % of Population: ${fmtPercent(nat.strike_percent)}, Wage Demand: ${fmtMoney(nat.wage_demand)}`;
+          }
         }
 
-        // Update metrics bar
+        // Economic metrics
         const impactFeatures = data.economicImpact || [];
-        impactFeatures.forEach(f=>{
-          const m=f.metric.toLowerCase();
-          const v=f.current_value;
-          if(m.includes('productivity')) document.getElementById('prod').textContent=v;
-          else if(m.includes('closing')) document.getElementById('close').textContent=v;
-          else if(m.includes('confidence')) document.getElementById('conf').textContent=v;
-          else if(m.includes('inflation')) document.getElementById('infl').textContent=v;
-          else if(m.includes('wage')) document.getElementById('wage').textContent=v;
+        impactFeatures.forEach(f => {
+          const m = f.metric.toLowerCase();
+          let v = Number(f.current_value);
+          if(m.includes('productivity')) document.getElementById('prod').textContent = fmtPercent(v);
+          else if(m.includes('closing')) document.getElementById('close').textContent = fmtPercent(v);
+          else if(m.includes('confidence')) document.getElementById('conf').textContent = fmtPercent(v);
+          else if(m.includes('inflation')) document.getElementById('infl').textContent = fmtPercent(v);
+          else if(m.includes('wage')) document.getElementById('wage').textContent = fmtPercent(v);
         });
 
         // Map layers
-        map.addSource('regions',{type:'geojson',data});
+        map.addSource('regions',{type:'geojson',data:data.geojson});
         map.addLayer({
           id:'regions-fill',
           type:'fill',
@@ -161,25 +153,24 @@
           filter:['==',['get','sheet'],'StrikeTracker']
         });
 
-        // Popup
-        const popup=new mapboxgl.Popup({closeButton:false,closeOnClick:false});
-        map.on('mousemove','regions-fill',e=>{
-          const p=e.features[0].properties;
+        const popup = new mapboxgl.Popup({closeButton:false,closeOnClick:false});
+        map.on('mousemove','regions-fill', e => {
+          const p = e.features[0].properties;
           popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region||'Unknown Region'}</strong><br/>
-              <b>Strikers:</b> ${p.strikers||'N/A'}<br/>
-              <b>Strike % of Population:</b> ${p.strike_percent||'0'}%<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output||'N/A'}<br/>
-              <b>Wage Demand ($):</b> ${p.wage_demand||'N/A'}<br/>
-              <b>Notes:</b> ${p.notes||'None'}
+              <strong>${p.region || 'Unknown Region'}</strong><br/>
+              <b>Strikers:</b> ${fmtNum(p.strikers)}<br/>
+              <b>Strike % of Population:</b> ${fmtPercent(p.strike_percent)}<br/>
+              <b>Adjusted Output:</b> ${fmtPercent(p.adjusted_output)}<br/>
+              <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
+              <b>Notes:</b> ${p.notes || 'None'}
             `).addTo(map);
         });
         map.on('mouseleave','regions-fill',()=>popup.remove());
 
       } catch(err) {
-        console.error('Map load error:',err);
-        document.getElementById('map').innerHTML='<p style="color:red;text-align:center;">Map failed to load</p>';
+        console.error('Map load error:', err);
+        document.getElementById('map').innerHTML = '<p style="color:red;text-align:center;">Map failed to load</p>';
       }
     });
   </script>
