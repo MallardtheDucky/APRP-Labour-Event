@@ -35,7 +35,6 @@
     #debug h4{ margin:0 0 6px 0; font-size:13px; color:#ffd57a }
     #debug pre{ white-space:pre-wrap; word-break:break-word; max-height:30vh; overflow:auto; margin:6px 0; background:rgba(0,0,0,0.2); padding:8px; border-radius:4px }
     #debug .btn { display:inline-block; padding:6px 8px; background:#2a2a2a; color:#fff; border-radius:4px; cursor:pointer; margin-right:6px; font-size:12px; }
-    #debug .warn { color:#ffb86b; }
     #refresh { position: absolute; top:10px; right:10px; z-index:1200; padding:6px 10px; border-radius:6px; background:#1e90ff; color:white; border:none; cursor:pointer; }
   </style>
 </head>
@@ -70,51 +69,34 @@
     <div><span style="background:#d12c0f"></span>High strike %</div>
   </div>
 
-  <!-- Debug panel (visible) -->
-  <div id="debug" aria-live="polite" role="status">
+  <!-- Debug panel -->
+  <div id="debug">
     <h4>Data fetch debug</h4>
     <div>
       <span class="btn" id="btn-fetch">Fetch now</span>
       <span class="btn" id="btn-clear">Clear</span>
     </div>
-    <div style="margin-top:8px;">
-      <strong>Status:</strong> <span id="dbg-status">idle</span>
-    </div>
-    <div style="margin-top:8px;">
-      <strong>Raw response (first 20k chars):</strong>
-      <pre id="raw">—</pre>
-    </div>
-    <div>
-      <strong>Parsed JSON preview:</strong>
-      <pre id="json">—</pre>
-    </div>
-    <div>
-      <strong>GeoJSON check:</strong>
-      <pre id="geo-check">—</pre>
-    </div>
-    <div>
-      <strong>Notes / hints:</strong>
-      <pre id="hints">If fetch fails: ensure Apps Script is deployed as Web App with access "Anyone, even anonymous". If response is HTML (login page), that indicates it's not public.</pre>
-    </div>
+    <div><strong>Status:</strong> <span id="dbg-status">idle</span></div>
+    <div><strong>Raw response (first 20k chars):</strong><pre id="raw">—</pre></div>
+    <div><strong>Parsed JSON preview:</strong><pre id="json">—</pre></div>
+    <div><strong>GeoJSON check:</strong><pre id="geo-check">—</pre></div>
+    <div><strong>Notes:</strong><pre id="hints">If fetch fails: ensure Apps Script is deployed as Web App with access "Anyone, even anonymous".</pre></div>
   </div>
 
   <script>
-    // -------- CONFIG --------
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec';
-    mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
+    mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
 
-    // elements
-    const dbgStatus = document.getElementById('dbg-status');
-    const rawEl = document.getElementById('raw');
-    const jsonEl = document.getElementById('json');
-    const geoCheckEl = document.getElementById('geo-check');
-    const hintsEl = document.getElementById('hints');
+    const dbgStatus=document.getElementById('dbg-status'),
+          rawEl=document.getElementById('raw'),
+          jsonEl=document.getElementById('json'),
+          geoCheckEl=document.getElementById('geo-check'),
+          hintsEl=document.getElementById('hints');
 
-    const btnFetch = document.getElementById('btn-fetch');
-    const btnClear = document.getElementById('btn-clear');
-    const btnRefresh = document.getElementById('refresh');
+    const btnFetch=document.getElementById('btn-fetch'),
+          btnClear=document.getElementById('btn-clear'),
+          btnRefresh=document.getElementById('refresh');
 
-    // map + UI
     const map = new mapboxgl.Map({
       container: 'map',
       style: 'mapbox://styles/mapbox/light-v10',
@@ -122,228 +104,100 @@
       zoom: 3
     });
 
-    // header toggle (same as before)
-    const header = document.getElementById('header');
-    const mapDiv = document.getElementById('map');
-    const toggleButton = document.getElementById('toggle-header');
-    toggleButton.addEventListener('click', () => {
-      header.classList.toggle('hidden');
-      mapDiv.classList.toggle('full');
-      toggleButton.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
-      map.resize();
-    });
-
-    // refresh + fetch handlers
     btnFetch.addEventListener('click', fetchAndRender);
-    btnClear.addEventListener('click', ()=>{ rawEl.textContent = '—'; jsonEl.textContent='—'; geoCheckEl.textContent='—'; dbgStatus.textContent='idle'; });
+    btnClear.addEventListener('click', ()=>{ rawEl.textContent='—'; jsonEl.textContent='—'; geoCheckEl.textContent='—'; dbgStatus.textContent='idle'; });
     btnRefresh.addEventListener('click', fetchAndRender);
 
-    // small helpers
-    function setStatus(s){ dbgStatus.textContent = s; }
-    function showRaw(text){ rawEl.textContent = text.slice(0,20000); }
-    function showJSON(obj){ jsonEl.textContent = JSON.stringify(obj, null, 2).slice(0,20000); }
-    function showGeo(msg){ geoCheckEl.textContent = msg; }
-    function fmtPercentRaw(v){
-      if (v === null || v === undefined || v === '') return '0%';
-      const s = String(v).trim();
-      if (s.includes('%')) return s;
-      const num = Number(s);
-      if (isNaN(num)) return s;
-      // guess: if absolute <= 1 treat as fraction
-      if (Math.abs(num) > 0 && Math.abs(num) <= 1) return (num*100).toFixed(2) + '%';
-      return num.toFixed(2) + '%';
-    }
-    function fmtMoney(v){
-      if (v === null || v === undefined || v === '') return '$0';
-      const s = String(v).replace(/[^0-9.\-]/g,'');
-      const num = Number(s);
-      if (isNaN(num)) return String(v);
-      return '$' + num.toLocaleString();
+    function setStatus(s){ dbgStatus.textContent=s; }
+    function showRaw(t){ rawEl.textContent=t.slice(0,20000); }
+    function showJSON(o){ jsonEl.textContent=JSON.stringify(o,null,2).slice(0,20000); }
+    function showGeo(m){ geoCheckEl.textContent=m; }
+
+    // Normalize region names to uppercase for matching
+    function normRegion(str){
+      return (str||'').toString().trim().toUpperCase();
     }
 
-    // safe remove layer/source helper
-    function removeLayerIfExists(id){
-      try {
-        if (map.getLayer(id)) map.removeLayer(id);
-      } catch(e){}
-      try {
-        if (map.getSource(id)) map.removeSource(id);
-      } catch(e){}
-    }
-
-    // main fetch + render routine
     async function fetchAndRender(){
       setStatus('fetching...');
-      showRaw('fetching…');
-      showJSON('—');
-      showGeo('—');
-
-      const url = APPS_SCRIPT_URL + '?_=' + Date.now(); // cache-bust
+      showRaw('fetching…'); showJSON('—'); showGeo('—');
       try {
-        const res = await fetch(url, { method:'GET', mode:'cors', cache:'no-store', credentials:'omit', headers: { 'Accept':'application/json' } });
+        const res = await fetch(APPS_SCRIPT_URL+'?_'+Date.now());
         const text = await res.text();
-        showRaw(`HTTP ${res.status} ${res.statusText}\n\n` + text);
+        showRaw(`HTTP ${res.status} ${res.statusText}\n\n`+text);
 
-        // quick check: if response looks like HTML (login page), warn
-        const trimmed = text.trim();
-        if (trimmed.startsWith('<') || /<html/i.test(trimmed)){
-          setStatus('failed: HTML returned (likely not public / permission/login page)');
-          hintsEl.textContent = 'Response is HTML. Likely causes: Apps Script not deployed as Web App to "Anyone, even anonymous", or you are not using the published web app URL. Redeploy and select "Anyone, even anonymous".';
+        if (text.trim().startsWith('<')) {
+          setStatus('failed: HTML returned (not public)');
           return;
         }
 
-        // parse JSON
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch(parseErr){
-          setStatus('failed: JSON parse error');
-          hintsEl.textContent = 'Could not parse JSON. Look at raw response above. If it contains HTML, see the note about deployment/permissions.';
-          return;
-        }
-
+        const data=JSON.parse(text);
         showJSON(data);
 
-        // check for error object returned by Apps Script
-        if (data.error){
-          setStatus('apps script error');
-          hintsEl.textContent = 'Apps Script returned an error: ' + data.error;
-          return;
-        }
+        const geojson=data.geojson;
+        if(!geojson||!geojson.features){setStatus('invalid geojson');return;}
+        setStatus('geojson ok — '+geojson.features.length+' features');
 
-        // expect data.geojson
-        const geojson = data.geojson || data;
-        if (!geojson || !geojson.features || !Array.isArray(geojson.features)){
-          setStatus('invalid geojson');
-          hintsEl.textContent = 'No geojson.features found in API response. Response keys: ' + Object.keys(data).join(', ');
-          return;
-        }
-
-        setStatus('geojson ok — features: ' + geojson.features.length);
-
-        // log first few properties in panel
-        const sample = geojson.features.slice(0,8).map((f,i) => {
-          return `#${i} region="${(f.properties && (f.properties.region||f.properties.name))||'[none]'}" — props: ${JSON.stringify(f.properties).slice(0,400)}`;
-        }).join('\n\n');
-        showGeo(`features: ${geojson.features.length}\n\n${sample}`);
-
-        // Update economic metrics (data.economicImpact expected)
-        const impact = (data.economicImpact || data.economicimpact || []);
-        if (Array.isArray(impact) && impact.length){
-          impact.forEach(entry => {
-            if (!entry || !entry.metric) return;
-            const m = (''+entry.metric).toLowerCase();
-            const v = entry.current_value;
-            if (m.includes('productivity')) document.getElementById('prod').textContent = (v===null||v===undefined)?'—':String(v);
-            else if (m.includes('closing')) document.getElementById('close').textContent = (v===null||v===undefined)?'—':String(v);
-            else if (m.includes('confidence')) document.getElementById('conf').textContent = (v===null||v===undefined)?'—':String(v);
-            else if (m.includes('inflation')) document.getElementById('infl').textContent = (v===null||v===undefined)?'—':String(v);
-            else if (m.includes('wage')) document.getElementById('wage').textContent = (v===null||v===undefined)?'—':String(v);
-          });
-        } else {
-          // if missing, clear them
-          document.getElementById('prod').textContent='—';
-          document.getElementById('close').textContent='—';
-          document.getElementById('conf').textContent='—';
-          document.getElementById('infl').textContent='—';
-          document.getElementById('wage').textContent='—';
-        }
-
-        // Nationwide feature search (case-insensitive)
-        const nationwide = geojson.features.find(f => {
-          const r = (f.properties && (f.properties.region || f.properties.name || '') ).toString().trim().toUpperCase();
-          return r === 'NATIONWIDE' || r === '—' || r === 'NATIONAL' ;
+        // Fix case-insensitive region matching: copy uppercase name
+        geojson.features.forEach(f=>{
+          if(f.properties){
+            f.properties.region_upper=normRegion(f.properties.region||f.properties.name);
+          }
         });
 
-        if (nationwide && nationwide.properties){
-          const np = nationwide.properties;
-          document.getElementById('nat-strikers').textContent = (np.strikers === undefined || np.strikers === null) ? '0' : String(np.strikers);
-          document.getElementById('nat-percent').textContent = fmtPercentRaw(np.strike_percent);
-          document.getElementById('nat-wage').textContent = fmtMoney(np.wage_demand);
-        } else {
-          document.getElementById('nat-strikers').textContent = '0';
-          document.getElementById('nat-percent').textContent = '0%';
-          document.getElementById('nat-wage').textContent = '$0';
+        const sample=geojson.features.slice(0,6).map((f,i)=>`#${i} ${f.properties.region_upper} — ${JSON.stringify(f.properties).slice(0,200)}`).join('\n\n');
+        showGeo(sample);
+
+        // Update economic metrics
+        (data.economicImpact||[]).forEach(e=>{
+          const m=(e.metric||'').toLowerCase();
+          if(m.includes('productivity')) document.getElementById('prod').textContent=e.current_value;
+          else if(m.includes('closing')) document.getElementById('close').textContent=e.current_value;
+          else if(m.includes('confidence')) document.getElementById('conf').textContent=e.current_value;
+          else if(m.includes('inflation')) document.getElementById('infl').textContent=e.current_value;
+          else if(m.includes('wage')) document.getElementById('wage').textContent=e.current_value;
+        });
+
+        // Nationwide update
+        const nat=geojson.features.find(f=>normRegion(f.properties.region||f.properties.name)==='NATIONWIDE');
+        if(nat&&nat.properties){
+          document.getElementById('nat-strikers').textContent=nat.properties.strikers||0;
+          document.getElementById('nat-percent').textContent=nat.properties.strike_percent||'0%';
+          document.getElementById('nat-wage').textContent=nat.properties.wage_demand||'$0';
         }
 
-        // Add or update GeoJSON source for Mapbox
-        try {
-          if (map.getSource('regions')) {
-            map.getSource('regions').setData(geojson);
-          } else {
-            map.addSource('regions', { type: 'geojson', data: geojson });
-          }
-        } catch (srcErr){
-          console.error('source error', srcErr);
-          setStatus('map source error');
-          hintsEl.textContent = 'Error adding geojson source to Mapbox: ' + (srcErr && srcErr.message);
-          return;
-        }
+        if(map.getSource('regions')) map.getSource('regions').setData(geojson);
+        else map.addSource('regions',{type:'geojson',data:geojson});
 
-        // Add layers if not present
-        if (!map.getLayer('regions-fill')) {
+        if(!map.getLayer('regions-fill')){
           map.addLayer({
-            id: 'regions-fill',
-            type: 'fill',
-            source: 'regions',
-            paint: {
-              'fill-color': [
-                'interpolate',
-                ['linear'],
-                ['to-number', ['get', 'strike_percent'], 0],
-                0, '#cccccc',
-                5, '#f4a6a6',
-                15, '#d12c0f'
-              ],
-              'fill-opacity': 0.8
-            }
-          }, /* beforeId */ undefined);
-        }
-
-        if (!map.getLayer('regions-outline')) {
-          map.addLayer({
-            id: 'regions-outline',
-            type: 'line',
-            source: 'regions',
-            paint: { 'line-color': '#000', 'line-width': 1 }
+            id:'regions-fill',type:'fill',source:'regions',
+            paint:{'fill-color':['interpolate',['linear'],['to-number',['get','strike_percent'],0],0,'#ccc',5,'#f4a6a6',15,'#d12c0f'],'fill-opacity':0.7}
           });
         }
+        if(!map.getLayer('regions-outline')){
+          map.addLayer({id:'regions-outline',type:'line',source:'regions',paint:{'line-color':'#000','line-width':1}});
+        }
 
-        // Setup popup interactions (replace any previous)
-        const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
-        map.on('mousemove', 'regions-fill', e => {
-          if (!e.features || !e.features[0]) return;
-          const p = e.features[0].properties || {};
-          popup.setLngLat(e.lngLat)
-            .setHTML(`
-              <strong>${p.region || p.name || 'Region'}</strong><br/>
-              <b>Strikers:</b> ${p.strikers ?? 'N/A'}<br/>
-              <b>Strike % of Population:</b> ${p.strike_percent ?? '0'}<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output ?? 'N/A'}<br/>
-              <b>Wage Demand ($):</b> ${p.wage_demand ?? 'N/A'}<br/>
-              <b>Notes:</b> ${p.notes ?? 'None'}
-            `).addTo(map);
+        const popup=new mapboxgl.Popup({closeButton:false,closeOnClick:false});
+        map.on('mousemove','regions-fill',e=>{
+          const p=e.features[0].properties;
+          popup.setLngLat(e.lngLat).setHTML(`
+            <strong>${p.region||p.name}</strong><br/>
+            Strikers: ${p.strikers}<br/>
+            Strike %: ${p.strike_percent}<br/>
+            Population: ${p.population}<br/>
+            Output: ${p.adjusted_output}<br/>
+            Wage: ${p.wage_demand}<br/>
+            Notes: ${p.notes}
+          `).addTo(map);
         });
         map.on('mouseleave','regions-fill',()=>popup.remove());
-
         setStatus('done');
-        hintsEl.textContent = 'Success — map updated with geojson. If something looks off, check the "Parsed JSON preview" above and ensure region names in your GeoJSON match the spreadsheet COM_REGION values (case-insensitive matching used for Nationwide only).';
-
-      } catch (err) {
-        console.error('Fetch/render error', err);
-        setStatus('error');
-        hintsEl.textContent = 'Fetch/render exception: ' + (err && err.message);
-      }
+      } catch(err){setStatus('error '+err);}
     }
 
-    // initial fetch when map is loaded (map.on('load') to ensure style ready)
-    map.on('load', () => {
-      fetchAndRender();
-    });
-
-    // initial small UX touch: add keyboard refresh (R)
-    window.addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') fetchAndRender(); });
-
+    map.on('load',fetchAndRender);
   </script>
 </body>
 </html>
