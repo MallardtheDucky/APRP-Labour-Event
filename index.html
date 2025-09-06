@@ -7,146 +7,181 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet"/>
   <style>
-    body { margin:0; padding:0; font-family:Arial, sans-serif; }
-    #map { position:absolute; top:0; bottom:0; width:100%; }
-    #metrics {
-      position:absolute; top:10px; left:10px;
-      background:white; padding:10px;
-      border-radius:6px; box-shadow:0 0 5px rgba(0,0,0,0.3);
-      font-size:13px; z-index:1;
+    body { margin:0; padding:0; font-family:sans-serif; }
+    #map { position:absolute; top:200px; bottom:0; width:100%; transition:top 0.3s ease; }
+    #header {
+      position:absolute; top:0; left:0; right:0;
+      background:#222; color:white; padding:15px 20px;
+      z-index:1000; display:flex; flex-direction:column; align-items:center;
+      height:200px; overflow:hidden; transition:transform 0.3s ease;
     }
+    #header.hidden { transform:translateY(-100%); }
+    #map.full { top:0; }
+    .title { font-size:26px; font-weight:bold; margin-bottom:8px; text-align:center; }
+    #nationwide {
+      font-size:16px; font-weight:bold; margin-bottom:12px; text-align:center; color:#0ff;
+    }
+    .metrics-container {
+      display:flex; flex-wrap:wrap; justify-content:center; gap:40px;
+      max-width:1000px;
+    }
+    .metric { text-align:center; }
+    .metric-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
+    .metric-value { font-size:18px; color:#00ff00; margin-top:4px; }
+    #toggle-header {
+      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+      background:none; border:none; color:white; font-size:24px;
+      cursor:pointer; transition:transform 0.3s ease;
+    }
+    #toggle-header.up { transform:translateX(-50%) rotate(180deg); }
+    #toggle-header-map {
+      position:absolute; top:10px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.7); border:none; color:white;
+      font-size:24px; cursor:pointer; padding:5px 10px;
+      border-radius:5px; z-index:1000; display:none;
+    }
+    #toggle-header-map.down { transform:translateX(-50%) rotate(180deg); }
+    #header.hidden + #map #toggle-header-map { display:block; }
     .legend {
-      background:white; padding:8px;
-      font-size:12px; font-family:Arial, sans-serif;
-      position:absolute; bottom:20px; left:20px;
-      border-radius:6px; box-shadow:0 0 4px rgba(0,0,0,0.3);
-      max-width:200px;
+      position:absolute; bottom:20px; right:20px; background:white;
+      padding:10px; border-radius:5px; font-size:12px;
     }
-    .legend h4 { margin:0 0 4px; font-size:14px; }
-    .legend div { margin:2px 0; }
+    .legend div { margin:4px 0; }
     .legend span {
-      display:inline-block; width:14px; height:14px;
-      margin-right:4px; vertical-align:middle;
+      display:inline-block; width:12px; height:12px; margin-right:6px;
     }
-    .legend hr { margin:6px 0; }
-    .legend h5 { margin:4px 0; font-size:13px; }
   </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="metrics"></div>
-<div class="legend" id="legend"><h4>Strike % of Population</h4></div>
+  <div id="header">
+    <div class="title">Labour Strikes Map</div>
+    <div id="nationwide">Nationwide Totals: Loading...</div>
+    <div class="metrics-container" id="metrics">
+      <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">0</div></div>
+      <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">0</div></div>
+      <div class="metric"><div class="metric-label">Confidence Index</div><div class="metric-value" id="conf">0</div></div>
+      <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">0</div></div>
+      <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">0</div></div>
+    </div>
+    <button id="toggle-header" title="Toggle header visibility">▲</button>
+  </div>
 
-<script>
-mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg";
+  <div id="map">
+    <button id="toggle-header-map" title="Toggle header visibility">▼</button>
+  </div>
 
-// Flat map (no globe, no tilt)
-const map = new mapboxgl.Map({
-  container: "map",
-  style: "mapbox://styles/mapbox/light-v11",
-  center: [-98, 39],
-  zoom: 3,
-  pitch: 0,
-  bearing: 0,
-  projection: "mercator"
-});
+  <div class="legend">
+    <div><span style="background:#cccccc"></span>No strikes</div>
+    <div><span style="background:#f4a6a6"></span>Low strike %</div>
+    <div><span style="background:#d12c0f"></span>High strike %</div>
+  </div>
 
-// Format helpers
-function fmtNum(v){ return v ? Number(v).toLocaleString() : '0'; }
-function fmtPercent(v){ return v ? (Number(v)*100).toFixed(2)+'%' : '0%'; }
-function fmtMoney(v){ return v ? '$'+Number(v).toLocaleString() : '$0'; }
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
 
-// Load Google Sheet JSON
-async function loadData() {
-  const url = "https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec";
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(resp.status+" "+resp.statusText);
-    return await resp.json();
-  } catch (err) {
-    console.error("❌ Error fetching data:", err);
-    alert("Could not load strike data (check console).");
-    return null;
-  }
-}
-
-map.on("load", async () => {
-  const data = await loadData();
-  if (!data) return;
-
-  // ---- Metrics ----
-  if (data.economicImpact) {
-    const mDiv = document.getElementById("metrics");
-    mDiv.innerHTML = "";
-    data.economicImpact.forEach(m => {
-      let val = m.current_value;
-      if (/wage/i.test(m.metric)) val = fmtMoney(val);
-      else if (/%|growth|inflation|closing|productivity/i.test(m.metric)) val = fmtPercent(val);
-      else val = fmtNum(val);
-      mDiv.innerHTML += `<div><strong>${m.metric}</strong>: ${val}</div>`;
+    const map = new mapboxgl.Map({
+      container:'map',
+      style:'mapbox://styles/mapbox/light-v10',
+      center:[-98.5795,39.8283],
+      zoom:3,
+      pitch:0,
+      bearing:0,
+      projection:'mercator'
     });
-  }
 
-  // ---- Regions ----
-  if (data.geojson) {
-    map.addSource("regions",{ type:"geojson", data:data.geojson });
+    // Toggle header
+    const header=document.getElementById('header');
+    const mapDiv=document.getElementById('map');
+    const toggleButton=document.getElementById('toggle-header');
+    const toggleButtonMap=document.getElementById('toggle-header-map');
 
-    map.addLayer({
-      id:"regions-fill", type:"fill", source:"regions",
-      paint:{
-        "fill-color":[
-          "interpolate", ["linear"], ["*",["get","strike_percent"],100],
-          0,"#cccccc", 1,"#f4a6a6", 5,"#ff9966",
-          10,"#ff3300", 20,"#b30000", 40,"#660000"
-        ],
-        "fill-opacity":0.7
+    function toggleHeader() {
+      header.classList.toggle('hidden');
+      mapDiv.classList.toggle('full');
+      toggleButton.classList.toggle('up');
+      toggleButtonMap.classList.toggle('down');
+      toggleButton.innerHTML=header.classList.contains('hidden')?'▼':'▲';
+      toggleButtonMap.innerHTML=header.classList.contains('hidden')?'▼':'▲';
+      map.resize();
+    }
+    toggleButton.addEventListener('click',toggleHeader);
+    toggleButtonMap.addEventListener('click',toggleHeader);
+
+    function fmtNum(v){ return v?Number(v).toLocaleString():'0'; }
+    function fmtPercent(v){ return v? (Number(v)*100).toFixed(2)+'%' : '0%'; }
+    function fmtMoney(v){ return v? '$'+Number(v).toLocaleString():'$0'; }
+
+    // Fetch and load map data
+    map.on('load',async()=>{
+      try {
+        const res=await fetch('https://script.google.com/macros/s/AKfycbwGj6JSMumK1BGaXJGJ5KJJjVgj4sBkyY65EKwQvtM2_xfmUzSkuz3OYY4Hd3-p5XZilg/exec');
+        const data=await res.json();
+
+        // Update Nationwide totals
+        if(data.nationwide){
+          const nat=data.nationwide;
+          document.getElementById('nationwide').innerHTML=
+            `Nationwide Totals — Strikers: ${fmtNum(nat.strikers)}, Strike %: ${fmtPercent(nat.strike_percent)}, Wage Demand: ${fmtMoney(nat.wage_demand)}`;
+        } else {
+          document.getElementById('nationwide').textContent="Nationwide Totals: N/A";
+        }
+
+        // Update metrics bar
+        const impactFeatures = data.economicImpact || [];
+        impactFeatures.forEach(f=>{
+          const m=f.metric.toLowerCase();
+          const v=f.current_value;
+          if(m.includes('productivity')) document.getElementById('prod').textContent=v;
+          else if(m.includes('closing')) document.getElementById('close').textContent=v;
+          else if(m.includes('confidence')) document.getElementById('conf').textContent=v;
+          else if(m.includes('inflation')) document.getElementById('infl').textContent=v;
+          else if(m.includes('wage')) document.getElementById('wage').textContent=v;
+        });
+
+        // Map layers
+        map.addSource('regions',{type:'geojson',data});
+        map.addLayer({
+          id:'regions-fill',
+          type:'fill',
+          source:'regions',
+          paint:{
+            'fill-color':[
+              'interpolate',['linear'],['to-number',['get','strike_percent'],0],
+              0,'#cccccc',5,'#f4a6a6',15,'#d12c0f'
+            ],
+            'fill-opacity':0.8
+          },
+          filter:['==',['get','sheet'],'StrikeTracker']
+        });
+        map.addLayer({
+          id:'regions-outline',
+          type:'line',
+          source:'regions',
+          paint:{'line-color':'#000','line-width':1},
+          filter:['==',['get','sheet'],'StrikeTracker']
+        });
+
+        // Popup
+        const popup=new mapboxgl.Popup({closeButton:false,closeOnClick:false});
+        map.on('mousemove','regions-fill',e=>{
+          const p=e.features[0].properties;
+          popup.setLngLat(e.lngLat)
+            .setHTML(`
+              <strong>${p.region||'Unknown Region'}</strong><br/>
+              <b>Strikers:</b> ${p.strikers||'N/A'}<br/>
+              <b>Strike % of Population:</b> ${p.strike_percent||'0'}%<br/>
+              <b>Adjusted Output:</b> ${p.adjusted_output||'N/A'}<br/>
+              <b>Wage Demand ($):</b> ${p.wage_demand||'N/A'}<br/>
+              <b>Notes:</b> ${p.notes||'None'}
+            `).addTo(map);
+        });
+        map.on('mouseleave','regions-fill',()=>popup.remove());
+
+      } catch(err) {
+        console.error('Map load error:',err);
+        document.getElementById('map').innerHTML='<p style="color:red;text-align:center;">Map failed to load</p>';
       }
     });
-
-    map.addLayer({
-      id:"regions-outline", type:"line", source:"regions",
-      paint:{ "line-color":"#333", "line-width":1 }
-    });
-
-    map.on("click","regions-fill",(e)=>{
-      const p=e.features[0].properties;
-      new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(`
-        <strong>${p.region}</strong><br/>
-        Population: ${fmtNum(p.population)}<br/>
-        Strikers: ${fmtNum(p.strikers)}<br/>
-        Strike %: ${fmtPercent(p.strike_percent)}<br/>
-        Baseline Output: ${fmtNum(p.baseline_output)}<br/>
-        Adjusted Output: ${fmtNum(p.adjusted_output)}<br/>
-        Wage Demand: ${fmtMoney(p.wage_demand)}<br/>
-        Notes: ${p.notes||""}
-      `).addTo(map);
-    });
-  }
-
-  // ---- Legend ----
-  const legend=document.getElementById("legend");
-  const grades=[0,1,5,10,20,40];
-  const colors=["#cccccc","#f4a6a6","#ff9966","#ff3300","#b30000","#660000"];
-  grades.forEach((g,i)=>{
-    const next=grades[i+1];
-    const item=document.createElement("div");
-    item.innerHTML=`<span style="background:${colors[i]}"></span>${next?`${g}% – ${next}%`:`${g}%+`}`;
-    legend.appendChild(item);
-  });
-
-  // ---- Nationwide Totals ----
-  if (data.nationwide) {
-    const nat = data.nationwide;
-    legend.innerHTML += `
-      <hr/><h5>Nationwide Totals</h5>
-      Strikers: ${fmtNum(nat.strikers)}<br/>
-      Strike %: ${fmtPercent(nat.strike_percent)}<br/>
-      Wage Demand: ${fmtMoney(nat.wage_demand)}
-    `;
-  } else {
-    console.warn("⚠️ No nationwide data found in JSON:", data);
-  }
-});
-</script>
+  </script>
 </body>
 </html>
