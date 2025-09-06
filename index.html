@@ -40,22 +40,23 @@
 <script>
 mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg";
 
-// Flat map, no pitch or bearing
+// Flat map (no globe, no tilt)
 const map = new mapboxgl.Map({
   container: "map",
   style: "mapbox://styles/mapbox/light-v11",
   center: [-98, 39],
   zoom: 3,
   pitch: 0,
-  bearing: 0
+  bearing: 0,
+  projection: "mercator"
 });
 
-// ---- Helpers ----
+// Format helpers
 function fmtNum(v){ return v ? Number(v).toLocaleString() : '0'; }
 function fmtPercent(v){ return v ? (Number(v)*100).toFixed(2)+'%' : '0%'; }
 function fmtMoney(v){ return v ? '$'+Number(v).toLocaleString() : '$0'; }
 
-// ---- Load Google Sheet JSON ----
+// Load Google Sheet JSON
 async function loadData() {
   const url = "https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec";
   try {
@@ -72,8 +73,6 @@ async function loadData() {
 map.on("load", async () => {
   const data = await loadData();
   if (!data) return;
-
-  console.log("✅ Data loaded:", data);
 
   // ---- Metrics ----
   if (data.economicImpact) {
@@ -135,14 +134,17 @@ map.on("load", async () => {
     legend.appendChild(item);
   });
 
-  // ---- Nationwide ----
+  // ---- Nationwide Totals ----
   if (data.nationwide) {
+    const nat = data.nationwide;
     legend.innerHTML += `
       <hr/><h5>Nationwide Totals</h5>
-      Strikers: ${fmtNum(data.nationwide.strikers)}<br/>
-      Strike %: ${fmtPercent(data.nationwide.strike_percent)}<br/>
-      Wage Demand: ${fmtMoney(data.nationwide.wage_demand)}
+      Strikers: ${fmtNum(nat.strikers)}<br/>
+      Strike %: ${fmtPercent(nat.strike_percent)}<br/>
+      Wage Demand: ${fmtMoney(nat.wage_demand)}
     `;
+  } else {
+    console.warn("⚠️ No nationwide data found in JSON:", data);
   }
 });
 </script>
