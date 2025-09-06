@@ -25,13 +25,6 @@
     .metric { text-align:center; }
     .metric-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
     .metric-value { font-size:18px; color:#00ff00; margin-top:4px; }
-    .nationwide-container {
-      margin-top:15px;
-      display:flex; gap:40px; justify-content:center;
-    }
-    .nationwide-metric { text-align:center; }
-    .nationwide-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
-    .nationwide-value { font-size:18px; color:#ffd700; margin-top:4px; }
     #toggle-header {
       position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
       background:none; border:none; color:white; font-size:24px;
@@ -54,6 +47,12 @@
     .legend span {
       display:inline-block; width:12px; height:12px; margin-right:6px;
     }
+    .nationwide-container {
+      display:flex; justify-content:center; gap:40px; margin-top:10px;
+    }
+    .nationwide { text-align:center; }
+    .nationwide-label { font-size:14px; font-weight:bold; }
+    .nationwide-value { font-size:18px; color:#ffcc00; margin-top:4px; }
   </style>
 </head>
 <body>
@@ -66,13 +65,11 @@
       <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">0</div></div>
       <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">0</div></div>
     </div>
-
     <div class="nationwide-container">
-      <div class="nationwide-metric"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">0</div></div>
-      <div class="nationwide-metric"><div class="nationwide-label">Nationwide Strike %</div><div class="nationwide-value" id="nat-percent">0%</div></div>
-      <div class="nationwide-metric"><div class="nationwide-label">Nationwide Wage Demand</div><div class="nationwide-value" id="nat-wage">$0</div></div>
+      <div class="nationwide"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">0</div></div>
+      <div class="nationwide"><div class="nationwide-label">Strike % of Population</div><div class="nationwide-value" id="nat-percent">0%</div></div>
+      <div class="nationwide"><div class="nationwide-label">Wage Demand ($)</div><div class="nationwide-value" id="nat-wage">0</div></div>
     </div>
-
     <button id="toggle-header" title="Toggle header visibility">▲</button>
   </div>
 
@@ -115,82 +112,84 @@
     toggleButtonMap.addEventListener('click',toggleHeader);
 
     // Fetch and load map data
-    map.on('load',async()=>{
+    map.on('load', async () => {
       try {
-        const res=await fetch('https://script.google.com/macros/s/AKfycbzWuh0IYT9yL36FqjPdQR70fJx8fMWX5FHQvT5eQy5wNrG0DiNx4q5rUXi2b4tMgEyUcw/exec');
-        const data=await res.json();
+        const res = await fetch('https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec');
+        const data = await res.json();
 
-        // Correct structure: use data.geojson.features
-        const regionFeatures = data.geojson.features.filter(f=>f.properties.sheet==='StrikeTracker');
+        // ✅ Correct structure
+        const geojson = data.geojson;
         const impactFeatures = data.economicImpact || [];
 
         // Update metrics bar
-        impactFeatures.forEach(f=>{
-          const m=f.metric.toLowerCase();
-          const v=f.current_value;
-          if(m.includes('productivity')) document.getElementById('prod').textContent=v;
-          else if(m.includes('closing')) document.getElementById('close').textContent=v;
-          else if(m.includes('confidence')) document.getElementById('conf').textContent=v;
-          else if(m.includes('inflation')) document.getElementById('infl').textContent=v;
-          else if(m.includes('wage')) document.getElementById('wage').textContent=v;
+        impactFeatures.forEach(f => {
+          const m = f.metric.toLowerCase();
+          const v = f.current_value;
+          if (m.includes('productivity')) document.getElementById('prod').textContent = v;
+          else if (m.includes('closing')) document.getElementById('close').textContent = v;
+          else if (m.includes('confidence')) document.getElementById('conf').textContent = v;
+          else if (m.includes('inflation')) document.getElementById('infl').textContent = v;
+          else if (m.includes('wage')) document.getElementById('wage').textContent = v;
         });
 
-        // Update nationwide metrics
-        const nationwide = regionFeatures.find(f => (f.properties.region||"").toUpperCase()==="NATIONWIDE");
-        if(nationwide){
-          document.getElementById('nat-strikers').textContent=nationwide.properties.strikers || 0;
-          document.getElementById('nat-percent').textContent=nationwide.properties.strike_percent || "0%";
-          document.getElementById('nat-wage').textContent=nationwide.properties.wage_demand || "$0";
+        // Find Nationwide totals
+        const nationwide = geojson.features.find(f => (f.properties.region || "").toUpperCase() === "NATIONWIDE");
+        if (nationwide) {
+          const np = nationwide.properties;
+          document.getElementById('nat-strikers').textContent = np.strikers || 0;
+          document.getElementById('nat-percent').textContent = (np.strike_percent || 0) + "%";
+          document.getElementById('nat-wage').textContent = "$" + (np.wage_demand || 0);
         }
 
-        // Add regions source and layers
-        map.addSource('regions',{type:'geojson',data:data.geojson});
+        // ✅ Now feed only the GeoJSON to mapbox
+        map.addSource('regions', { type: 'geojson', data: geojson });
 
         map.addLayer({
-          id:'regions-fill',
-          type:'fill',
-          source:'regions',
-          paint:{
-            'fill-color':[
+          id: 'regions-fill',
+          type: 'fill',
+          source: 'regions',
+          paint: {
+            'fill-color': [
               'interpolate',
               ['linear'],
-              ['to-number',['get','strike_percent'],0],
-              0,'#cccccc',
-              5,'#f4a6a6',
-              15,'#d12c0f'
+              ['to-number', ['get', 'strike_percent'], 0],
+              0, '#cccccc',
+              5, '#f4a6a6',
+              15, '#d12c0f'
             ],
-            'fill-opacity':0.8
-          },
-          filter:['==',['get','sheet'],'StrikeTracker']
+            'fill-opacity': 0.8
+          }
         });
 
         map.addLayer({
-          id:'regions-outline',
-          type:'line',
-          source:'regions',
-          paint:{'line-color':'#000','line-width':1},
-          filter:['==',['get','sheet'],'StrikeTracker']
+          id: 'regions-outline',
+          type: 'line',
+          source: 'regions',
+          paint: { 'line-color': '#000', 'line-width': 1 }
         });
 
         // Popup
-        const popup=new mapboxgl.Popup({closeButton:false,closeOnClick:false});
-        map.on('mousemove','regions-fill',e=>{
-          const p=e.features[0].properties;
+        const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
+
+        map.on('mousemove', 'regions-fill', e => {
+          const p = e.features[0].properties;
           popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region||'Unknown Region'}</strong><br/>
-              <b>Strikers:</b> ${p.strikers||'N/A'}<br/>
-              <b>Strike % of Population:</b> ${p.strike_percent||'0'}<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output||'N/A'}<br/>
-              <b>Wage Demand ($):</b> ${p.wage_demand||'N/A'}<br/>
-              <b>Notes:</b> ${p.notes||'None'}
+              <strong>${p.region || 'Unknown Region'}</strong><br/>
+              <b>Strikers:</b> ${p.strikers || 'N/A'}<br/>
+              <b>Strike % of Population:</b> ${p.strike_percent || '0'}%<br/>
+              <b>Adjusted Output:</b> ${p.adjusted_output || 'N/A'}<br/>
+              <b>Wage Demand ($):</b> ${p.wage_demand || 'N/A'}<br/>
+              <b>Notes:</b> ${p.notes || 'None'}
             `).addTo(map);
         });
-        map.on('mouseleave','regions-fill',()=>popup.remove());
 
-      } catch(err) {
-        console.error('Map load error:',err);
-        document.getElementById('map').innerHTML='<p style="color:red;text-align:center;">Map failed to load</p>';
+        map.on('mouseleave', 'regions-fill', () => popup.remove());
+
+      } catch (err) {
+        console.error('Map load error:', err);
+        document.getElementById('map').innerHTML =
+          '<p style="color:red;text-align:center;">Map failed to load</p>';
       }
     });
   </script>
