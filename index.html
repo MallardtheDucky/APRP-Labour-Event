@@ -8,12 +8,12 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet"/>
   <style>
     body { margin:0; padding:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; }
-    #map { position:absolute; top:220px; bottom:0; width:100%; }
+    #map { position:absolute; top:220px; bottom:0; width:100%; transition:top 0.3s ease; }
     #header {
       position:absolute; top:0; left:0; right:0;
       background:#222; color:white; padding:12px 18px;
       z-index:1000; display:flex; flex-direction:column; align-items:center;
-      height:220px;
+      height:220px; overflow:hidden; transition:transform 0.3s ease;
     }
     .title { font-size:22px; font-weight:700; margin-bottom:8px; text-align:center; }
     .metrics-container{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;max-width:1100px}
@@ -23,7 +23,9 @@
     .nationwide-container{ display:flex; gap:28px; margin-top:10px; justify-content:center }
     .nationwide-label{ font-size:13px; font-weight:700; color:#ffd57a }
     .nationwide-value{ font-size:16px; color:#ffd57a; margin-top:4px }
+    #toggle-header{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:none; border:none; color:white; font-size:22px; cursor:pointer }
     .legend{ position:absolute; bottom:20px; right:20px; background:white; padding:10px; border-radius:6px; font-size:12px }
+    .legend div{ margin:3px 0 }
     .legend span{ display:inline-block; width:12px; height:12px; margin-right:6px }
     #refresh { position: absolute; top:10px; right:10px; z-index:1200; padding:6px 10px; border-radius:6px; background:#1e90ff; color:white; border:none; cursor:pointer; }
   </style>
@@ -31,6 +33,7 @@
 <body>
   <div id="header">
     <div class="title">Live Labour Strikes Map</div>
+
     <div class="metrics-container" id="metrics">
       <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">—</div></div>
       <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">—</div></div>
@@ -38,150 +41,158 @@
       <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">—</div></div>
       <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">—</div></div>
     </div>
+
     <div class="nationwide-container">
       <div class="nationwide"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">—</div></div>
       <div class="nationwide"><div class="nationwide-label">Strike % of Population</div><div class="nationwide-value" id="nat-percent">—</div></div>
       <div class="nationwide"><div class="nationwide-label">Wage Demand ($)</div><div class="nationwide-value" id="nat-wage">—</div></div>
     </div>
+
+    <button id="toggle-header" title="Toggle header visibility">▲</button>
   </div>
 
-  <button id="refresh">Refresh</button>
+  <button id="refresh" title="Refresh data">Refresh</button>
+
   <div id="map"></div>
 
   <div class="legend">
-    <div><span style="background:#cccccc"></span>No strikes</div>
-    <div><span style="background:#f4a6a6"></span>Low strike %</div>
-    <div><span style="background:#d12c0f"></span>High strike %</div>
+    <div><span style="background:#cccccc"></span>No strikes (0%)</div>
+    <div><span style="background:#f2f0a6"></span>Very Low (0–2%)</div>
+    <div><span style="background:#f4a6a6"></span>Low (2–5%)</div>
+    <div><span style="background:#ff7f50"></span>Medium (5–10%)</div>
+    <div><span style="background:#d12c0f"></span>High (10–20%)</div>
+    <div><span style="background:#800000"></span>Extreme (20%+)</div>
   </div>
 
   <script>
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbiHJ4rw5GmmLgiwHuNRgcULKG6D_SRp1WN6cHx134_-qoD1O_tiXaTIcd4kb_okyvGw/exec";
-    mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg";
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxbiHJ4rw5GmmLgiwHuNRgcULKG6D_SRp1WN6cHx134_-qoD1O_tiXaTIcd4kb_okyvGw/exec';
+    mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
 
     const map = new mapboxgl.Map({
-      container: "map",
-      style: "mapbox://styles/mapbox/light-v10",
+      container: 'map',
+      style: 'mapbox://styles/mapbox/light-v10',
       center: [-98.5795, 39.8283],
       zoom: 3
     });
 
-    // Format helpers
-    function fmtPercent(v){
-      if (!v) return "0%";
-      const num = Number(String(v).replace("%",""));
+    const toggleButton = document.getElementById('toggle-header');
+    const header = document.getElementById('header');
+    const mapDiv = document.getElementById('map');
+    toggleButton.addEventListener('click', () => {
+      header.classList.toggle('hidden');
+      mapDiv.classList.toggle('full');
+      toggleButton.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
+      map.resize();
+    });
+
+    function roundNumber(v, decimals = 2){
+      if (v === null || v === undefined || v === '') return 0;
+      const num = Number(v);
       if (isNaN(num)) return v;
-      return num.toFixed(2) + "%";
+      return Number(num.toFixed(decimals));
+    }
+
+    function fmtPercent(v){
+      if (v === null || v === undefined || v === '') return '0%';
+      const num = Number(v);
+      if (isNaN(num)) return String(v);
+      return roundNumber(num, 2) + '%';
     }
     function fmtMoney(v){
-      if (!v) return "$0";
-      const num = Number(String(v).replace(/[^0-9.\-]/g,""));
-      if (isNaN(num)) return v;
-      return "$" + Math.round(num).toLocaleString();
-    }
-    function fmtNumber(v){
-      if (!v) return "0";
-      const num = Number(v);
-      if (isNaN(num)) return v;
-      return Math.round(num).toLocaleString();
-    }
-    function fmtDecimal(v, places=2){
-      if (!v) return "0";
-      const num = Number(v);
-      if (isNaN(num)) return v;
-      return num.toFixed(places);
+      if (v === null || v === undefined || v === '') return '$0';
+      const s = String(v).replace(/[^0-9.\-]/g,'');
+      const num = Number(s);
+      if (isNaN(num)) return String(v);
+      return '$' + roundNumber(num, 0).toLocaleString();
     }
 
     async function fetchAndRender(){
       try {
-        const res = await fetch(APPS_SCRIPT_URL + "?_=" + Date.now());
+        const res = await fetch(APPS_SCRIPT_URL + '?_=' + Date.now());
         const data = await res.json();
 
         const geojson = data.geojson || data;
         if (!geojson || !geojson.features) return;
 
         // Economic metrics
-        (data.economicImpact || []).forEach(entry => {
-          if (!entry.metric) return;
+        const impact = data.economicImpact || [];
+        impact.forEach(entry => {
+          if (!entry || !entry.metric) return;
           const m = entry.metric.toLowerCase();
-          const v = entry.current_value;
-          if (m.includes("productivity")) document.getElementById("prod").textContent = fmtPercent(v);
-          else if (m.includes("closing")) document.getElementById("close").textContent = fmtPercent(v);
-          else if (m.includes("confidence")) document.getElementById("conf").textContent = fmtDecimal(v,2);
-          else if (m.includes("inflation")) document.getElementById("infl").textContent = fmtPercent(v);
-          else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
+          const v = roundNumber(entry.current_value, 2);
+          if (m.includes('productivity')) document.getElementById('prod').textContent = v + '%';
+          else if (m.includes('closing')) document.getElementById('close').textContent = v + '%';
+          else if (m.includes('confidence')) document.getElementById('conf').textContent = v;
+          else if (m.includes('inflation')) document.getElementById('infl').textContent = v + '%';
+          else if (m.includes('wage')) document.getElementById('wage').textContent = '$' + v.toLocaleString();
         });
 
         // Nationwide stats
-        const nationwide = geojson.features.find(f => 
-          (f.properties.region || f.properties.name || "").toString().trim().toUpperCase() === "NATIONWIDE"
-        );
+        const nationwide = geojson.features.find(f => {
+          const r = (f.properties && (f.properties.region || f.properties.name || '')).toString().trim().toUpperCase();
+          return r === 'NATIONWIDE' || r === '—' || r === 'NATIONAL';
+        });
         if (nationwide) {
           const np = nationwide.properties;
-          document.getElementById("nat-strikers").textContent = fmtNumber(np.strikers);
-          document.getElementById("nat-percent").textContent = fmtPercent(np.strike_percent);
-          document.getElementById("nat-wage").textContent = fmtMoney(np.wage_demand);
+          document.getElementById('nat-strikers').textContent = roundNumber(np.strikers, 0).toLocaleString();
+          document.getElementById('nat-percent').textContent = fmtPercent(np.strike_percent);
+          document.getElementById('nat-wage').textContent = fmtMoney(np.wage_demand);
         }
 
-        // Normalize region names for merging
-        geojson.features.forEach(f => {
-          if (!f.properties) f.properties = {};
-          if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
-          if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
-          if (f.properties.strike_percent) f.properties.strike_percent = Number(f.properties.strike_percent);
-          if (f.properties.adjusted_output) f.properties.adjusted_output = Number(f.properties.adjusted_output);
-        });
-
-        if (map.getSource("regions")) {
-          map.getSource("regions").setData(geojson);
+        // Map source + layers
+        if (map.getSource('regions')) {
+          map.getSource('regions').setData(geojson);
         } else {
-          map.addSource("regions", { type:"geojson", data:geojson });
+          map.addSource('regions', { type: 'geojson', data: geojson });
           map.addLayer({
-            id:"regions-fill",
-            type:"fill",
-            source:"regions",
-            paint:{
-              "fill-color":[
-                "interpolate",["linear"],
-                ["to-number",["get","strike_percent"],0],
-                0,"#cccccc",
-                5,"#f4a6a6",
-                15,"#d12c0f"
+            id: 'regions-fill',
+            type: 'fill',
+            source: 'regions',
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['to-number', ['get', 'strike_percent'], 0],
+                0, '#cccccc',
+                2, '#f2f0a6',
+                5, '#f4a6a6',
+                10, '#ff7f50',
+                20, '#d12c0f',
+                40, '#800000'
               ],
-              "fill-opacity":0.8
+              'fill-opacity': 0.8
             }
           });
           map.addLayer({
-            id:"regions-outline",
-            type:"line",
-            source:"regions",
-            paint:{ "line-color":"#000", "line-width":1 }
+            id: 'regions-outline',
+            type: 'line',
+            source: 'regions',
+            paint: { 'line-color': '#000', 'line-width': 1 }
           });
         }
 
         // Popup
         const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
-        map.on("mousemove", "regions-fill", e => {
+        map.on('mousemove', 'regions-fill', e => {
           if (!e.features || !e.features[0]) return;
           const p = e.features[0].properties || {};
           popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region || p.name || "Region"}</strong><br/>
-              <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
+              <strong>${p.region || p.name || 'Region'}</strong><br/>
+              <b>Strikers:</b> ${roundNumber(p.strikers,0).toLocaleString()}<br/>
               <b>Strike % of Population:</b> ${fmtPercent(p.strike_percent)}<br/>
-              <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
+              <b>Adjusted Output:</b> ${roundNumber(p.adjusted_output,2)}<br/>
               <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
-              <b>Notes:</b> ${p.notes ?? "None"}
+              <b>Notes:</b> ${p.notes ?? 'None'}
             `).addTo(map);
         });
-        map.on("mouseleave","regions-fill",()=>popup.remove());
+        map.on('mouseleave','regions-fill',()=>popup.remove());
 
-      } catch(err){
-        console.error("Fetch/render failed:", err);
-      }
+      } catch(err){ console.error(err); }
     }
 
-    document.getElementById("refresh").addEventListener("click", fetchAndRender);
-    map.on("load", fetchAndRender);
+    document.getElementById('refresh').addEventListener('click', fetchAndRender);
+    map.on('load', fetchAndRender);
   </script>
 </body>
 </html>
