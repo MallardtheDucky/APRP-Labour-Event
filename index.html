@@ -65,6 +65,7 @@
       zoom: 3
     });
 
+    // Format helpers
     function fmtPercent(v){
       if (!v) return "0%";
       const num = Number(String(v).replace("%",""));
@@ -75,7 +76,19 @@
       if (!v) return "$0";
       const num = Number(String(v).replace(/[^0-9.\-]/g,""));
       if (isNaN(num)) return v;
-      return "$" + num.toLocaleString();
+      return "$" + Math.round(num).toLocaleString();
+    }
+    function fmtNumber(v){
+      if (!v) return "0";
+      const num = Number(v);
+      if (isNaN(num)) return v;
+      return Math.round(num).toLocaleString();
+    }
+    function fmtDecimal(v, places=2){
+      if (!v) return "0";
+      const num = Number(v);
+      if (isNaN(num)) return v;
+      return num.toFixed(places);
     }
 
     async function fetchAndRender(){
@@ -91,11 +104,11 @@
           if (!entry.metric) return;
           const m = entry.metric.toLowerCase();
           const v = entry.current_value;
-          if (m.includes("productivity")) document.getElementById("prod").textContent = v;
-          else if (m.includes("closing")) document.getElementById("close").textContent = v;
-          else if (m.includes("confidence")) document.getElementById("conf").textContent = v;
-          else if (m.includes("inflation")) document.getElementById("infl").textContent = v;
-          else if (m.includes("wage")) document.getElementById("wage").textContent = v;
+          if (m.includes("productivity")) document.getElementById("prod").textContent = fmtPercent(v);
+          else if (m.includes("closing")) document.getElementById("close").textContent = fmtPercent(v);
+          else if (m.includes("confidence")) document.getElementById("conf").textContent = fmtDecimal(v,2);
+          else if (m.includes("inflation")) document.getElementById("infl").textContent = fmtPercent(v);
+          else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
         // Nationwide stats
@@ -104,16 +117,18 @@
         );
         if (nationwide) {
           const np = nationwide.properties;
-          document.getElementById("nat-strikers").textContent = np.strikers ?? "0";
+          document.getElementById("nat-strikers").textContent = fmtNumber(np.strikers);
           document.getElementById("nat-percent").textContent = fmtPercent(np.strike_percent);
           document.getElementById("nat-wage").textContent = fmtMoney(np.wage_demand);
         }
 
-        // Merge: normalize region names
+        // Normalize region names for merging
         geojson.features.forEach(f => {
           if (!f.properties) f.properties = {};
           if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
           if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
+          if (f.properties.strike_percent) f.properties.strike_percent = Number(f.properties.strike_percent);
+          if (f.properties.adjusted_output) f.properties.adjusted_output = Number(f.properties.adjusted_output);
         });
 
         if (map.getSource("regions")) {
@@ -151,9 +166,9 @@
           popup.setLngLat(e.lngLat)
             .setHTML(`
               <strong>${p.region || p.name || "Region"}</strong><br/>
-              <b>Strikers:</b> ${p.strikers ?? "N/A"}<br/>
+              <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
               <b>Strike % of Population:</b> ${fmtPercent(p.strike_percent)}<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output ?? "N/A"}<br/>
+              <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
               <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
               <b>Notes:</b> ${p.notes ?? "None"}
             `).addTo(map);
