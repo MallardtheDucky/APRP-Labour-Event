@@ -1,81 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Live Labour Strikes Map</title>
+  <meta charset="utf-8" />
+  <title>Live Labour Strikes Map — Debugging Build</title>
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet"/>
   <style>
-    body { margin:0; padding:0; font-family:sans-serif; }
+    body { margin:0; padding:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; }
     #map { position:absolute; top:220px; bottom:0; width:100%; transition:top 0.3s ease; }
     #header {
       position:absolute; top:0; left:0; right:0;
-      background:#222; color:white; padding:15px 20px;
+      background:#222; color:white; padding:12px 18px;
       z-index:1000; display:flex; flex-direction:column; align-items:center;
       height:220px; overflow:hidden; transition:transform 0.3s ease;
     }
-    #header.hidden { transform:translateY(-100%); }
-    #map.full { top:0; }
-    .title { font-size:26px; font-weight:bold; margin-bottom:15px; text-align:center; }
-    .metrics-container {
-      display:flex; flex-wrap:wrap; justify-content:center; gap:40px;
-      max-width:1000px;
+    .title { font-size:22px; font-weight:700; margin-bottom:8px; text-align:center; }
+    .metrics-container{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;max-width:1100px}
+    .metric{ text-align:center }
+    .metric-label{ font-size:13px; text-transform:uppercase; font-weight:700; color:#ddd }
+    .metric-value{ font-size:18px; color:#6ef06e; margin-top:4px }
+    .nationwide-container{ display:flex; gap:28px; margin-top:10px; justify-content:center }
+    .nationwide-label{ font-size:13px; font-weight:700; color:#ffd57a }
+    .nationwide-value{ font-size:16px; color:#ffd57a; margin-top:4px }
+    #toggle-header{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:none; border:none; color:white; font-size:22px; cursor:pointer }
+    .legend{ position:absolute; bottom:20px; right:20px; background:white; padding:10px; border-radius:6px; font-size:12px }
+    .legend span{ display:inline-block; width:12px; height:12px; margin-right:6px }
+    /* debug panel */
+    #debug {
+      position:fixed; left:10px; bottom:10px; width:420px; max-height:45vh; overflow:auto;
+      background:rgba(12,12,12,0.92); color:#e6ffee; padding:10px; z-index:2000; font-family:monospace; font-size:12px; border-radius:6px;
+      box-shadow:0 6px 18px rgba(0,0,0,0.6);
     }
-    .metric { text-align:center; }
-    .metric-label { font-size:14px; text-transform:uppercase; font-weight:bold; }
-    .metric-value { font-size:18px; color:#00ff00; margin-top:4px; }
-    #toggle-header {
-      position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
-      background:none; border:none; color:white; font-size:24px;
-      cursor:pointer; transition:transform 0.3s ease;
-    }
-    #toggle-header.up { transform:translateX(-50%) rotate(180deg); }
-    #toggle-header-map {
-      position:absolute; top:10px; left:50%; transform:translateX(-50%);
-      background:rgba(0,0,0,0.7); border:none; color:white;
-      font-size:24px; cursor:pointer; padding:5px 10px;
-      border-radius:5px; z-index:1000; display:none;
-    }
-    #toggle-header-map.down { transform:translateX(-50%) rotate(180deg); }
-    #header.hidden + #map #toggle-header-map { display:block; }
-    .legend {
-      position:absolute; bottom:20px; right:20px; background:white;
-      padding:10px; border-radius:5px; font-size:12px;
-    }
-    .legend div { margin:4px 0; }
-    .legend span {
-      display:inline-block; width:12px; height:12px; margin-right:6px;
-    }
-    .nationwide-container {
-      display:flex; justify-content:center; gap:40px; margin-top:10px;
-    }
-    .nationwide { text-align:center; }
-    .nationwide-label { font-size:14px; font-weight:bold; }
-    .nationwide-value { font-size:18px; color:#ffcc00; margin-top:4px; }
+    #debug h4{ margin:0 0 6px 0; font-size:13px; color:#ffd57a }
+    #debug pre{ white-space:pre-wrap; word-break:break-word; max-height:30vh; overflow:auto; margin:6px 0; background:rgba(0,0,0,0.2); padding:8px; border-radius:4px }
+    #debug .btn { display:inline-block; padding:6px 8px; background:#2a2a2a; color:#fff; border-radius:4px; cursor:pointer; margin-right:6px; font-size:12px; }
+    #debug .warn { color:#ffb86b; }
+    #refresh { position: absolute; top:10px; right:10px; z-index:1200; padding:6px 10px; border-radius:6px; background:#1e90ff; color:white; border:none; cursor:pointer; }
   </style>
 </head>
 <body>
   <div id="header">
     <div class="title">Live Labour Strikes Map</div>
+
     <div class="metrics-container" id="metrics">
-      <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">0</div></div>
-      <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">0</div></div>
-      <div class="metric"><div class="metric-label">Confidence Index</div><div class="metric-value" id="conf">0</div></div>
-      <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">0</div></div>
-      <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">0</div></div>
+      <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">—</div></div>
+      <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">—</div></div>
+      <div class="metric"><div class="metric-label">Confidence Index</div><div class="metric-value" id="conf">—</div></div>
+      <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">—</div></div>
+      <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">—</div></div>
     </div>
+
     <div class="nationwide-container">
-      <div class="nationwide"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">0</div></div>
-      <div class="nationwide"><div class="nationwide-label">Strike % of Population</div><div class="nationwide-value" id="nat-percent">0%</div></div>
-      <div class="nationwide"><div class="nationwide-label">Wage Demand ($)</div><div class="nationwide-value" id="nat-wage">0</div></div>
+      <div class="nationwide"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">—</div></div>
+      <div class="nationwide"><div class="nationwide-label">Strike % of Population</div><div class="nationwide-value" id="nat-percent">—</div></div>
+      <div class="nationwide"><div class="nationwide-label">Wage Demand ($)</div><div class="nationwide-value" id="nat-wage">—</div></div>
     </div>
+
     <button id="toggle-header" title="Toggle header visibility">▲</button>
   </div>
 
-  <div id="map">
-    <button id="toggle-header-map" title="Toggle header visibility">▼</button>
-  </div>
+  <button id="refresh" title="Refresh data">Refresh</button>
+
+  <div id="map"></div>
 
   <div class="legend">
     <div><span style="background:#cccccc"></span>No strikes</div>
@@ -83,115 +70,280 @@
     <div><span style="background:#d12c0f"></span>High strike %</div>
   </div>
 
+  <!-- Debug panel (visible) -->
+  <div id="debug" aria-live="polite" role="status">
+    <h4>Data fetch debug</h4>
+    <div>
+      <span class="btn" id="btn-fetch">Fetch now</span>
+      <span class="btn" id="btn-clear">Clear</span>
+    </div>
+    <div style="margin-top:8px;">
+      <strong>Status:</strong> <span id="dbg-status">idle</span>
+    </div>
+    <div style="margin-top:8px;">
+      <strong>Raw response (first 20k chars):</strong>
+      <pre id="raw">—</pre>
+    </div>
+    <div>
+      <strong>Parsed JSON preview:</strong>
+      <pre id="json">—</pre>
+    </div>
+    <div>
+      <strong>GeoJSON check:</strong>
+      <pre id="geo-check">—</pre>
+    </div>
+    <div>
+      <strong>Notes / hints:</strong>
+      <pre id="hints">If fetch fails: ensure Apps Script is deployed as Web App with access "Anyone, even anonymous". If response is HTML (login page), that indicates it's not public.</pre>
+    </div>
+  </div>
+
   <script>
+    // -------- CONFIG --------
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec';
     mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
 
+    // elements
+    const dbgStatus = document.getElementById('dbg-status');
+    const rawEl = document.getElementById('raw');
+    const jsonEl = document.getElementById('json');
+    const geoCheckEl = document.getElementById('geo-check');
+    const hintsEl = document.getElementById('hints');
+
+    const btnFetch = document.getElementById('btn-fetch');
+    const btnClear = document.getElementById('btn-clear');
+    const btnRefresh = document.getElementById('refresh');
+
+    // map + UI
     const map = new mapboxgl.Map({
-      container:'map',
-      style:'mapbox://styles/mapbox/light-v10',
-      center:[-98.5795,39.8283],
-      zoom:3
+      container: 'map',
+      style: 'mapbox://styles/mapbox/light-v10',
+      center: [-98.5795, 39.8283],
+      zoom: 3
     });
 
-    // Toggle header
-    const header=document.getElementById('header');
-    const mapDiv=document.getElementById('map');
-    const toggleButton=document.getElementById('toggle-header');
-    const toggleButtonMap=document.getElementById('toggle-header-map');
-
-    function toggleHeader() {
+    // header toggle (same as before)
+    const header = document.getElementById('header');
+    const mapDiv = document.getElementById('map');
+    const toggleButton = document.getElementById('toggle-header');
+    toggleButton.addEventListener('click', () => {
       header.classList.toggle('hidden');
       mapDiv.classList.toggle('full');
-      toggleButton.classList.toggle('up');
-      toggleButtonMap.classList.toggle('down');
-      toggleButton.innerHTML=header.classList.contains('hidden')?'▼':'▲';
-      toggleButtonMap.innerHTML=header.classList.contains('hidden')?'▼':'▲';
+      toggleButton.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
       map.resize();
+    });
+
+    // refresh + fetch handlers
+    btnFetch.addEventListener('click', fetchAndRender);
+    btnClear.addEventListener('click', ()=>{ rawEl.textContent = '—'; jsonEl.textContent='—'; geoCheckEl.textContent='—'; dbgStatus.textContent='idle'; });
+    btnRefresh.addEventListener('click', fetchAndRender);
+
+    // small helpers
+    function setStatus(s){ dbgStatus.textContent = s; }
+    function showRaw(text){ rawEl.textContent = text.slice(0,20000); }
+    function showJSON(obj){ jsonEl.textContent = JSON.stringify(obj, null, 2).slice(0,20000); }
+    function showGeo(msg){ geoCheckEl.textContent = msg; }
+    function fmtPercentRaw(v){
+      if (v === null || v === undefined || v === '') return '0%';
+      const s = String(v).trim();
+      if (s.includes('%')) return s;
+      const num = Number(s);
+      if (isNaN(num)) return s;
+      // guess: if absolute <= 1 treat as fraction
+      if (Math.abs(num) > 0 && Math.abs(num) <= 1) return (num*100).toFixed(2) + '%';
+      return num.toFixed(2) + '%';
     }
-    toggleButton.addEventListener('click',toggleHeader);
-    toggleButtonMap.addEventListener('click',toggleHeader);
+    function fmtMoney(v){
+      if (v === null || v === undefined || v === '') return '$0';
+      const s = String(v).replace(/[^0-9.\-]/g,'');
+      const num = Number(s);
+      if (isNaN(num)) return String(v);
+      return '$' + num.toLocaleString();
+    }
 
-    // Fetch and load map data
-    map.on('load', async () => {
+    // safe remove layer/source helper
+    function removeLayerIfExists(id){
       try {
-        const res = await fetch('https://script.google.com/macros/s/AKfycbzSlHgv07HZhfwwXwjkmNpP-4YfY3UNfQzzMojmJg7gHc_WdloJ7bRIp2OcdZPrDJNfKw/exec');
-        const data = await res.json();
+        if (map.getLayer(id)) map.removeLayer(id);
+      } catch(e){}
+      try {
+        if (map.getSource(id)) map.removeSource(id);
+      } catch(e){}
+    }
 
-        // ✅ Correct structure
-        const geojson = data.geojson;
-        const impactFeatures = data.economicImpact || [];
+    // main fetch + render routine
+    async function fetchAndRender(){
+      setStatus('fetching...');
+      showRaw('fetching…');
+      showJSON('—');
+      showGeo('—');
 
-        // Update metrics bar
-        impactFeatures.forEach(f => {
-          const m = f.metric.toLowerCase();
-          const v = f.current_value;
-          if (m.includes('productivity')) document.getElementById('prod').textContent = v;
-          else if (m.includes('closing')) document.getElementById('close').textContent = v;
-          else if (m.includes('confidence')) document.getElementById('conf').textContent = v;
-          else if (m.includes('inflation')) document.getElementById('infl').textContent = v;
-          else if (m.includes('wage')) document.getElementById('wage').textContent = v;
-        });
+      const url = APPS_SCRIPT_URL + '?_=' + Date.now(); // cache-bust
+      try {
+        const res = await fetch(url, { method:'GET', mode:'cors', cache:'no-store', credentials:'omit', headers: { 'Accept':'application/json' } });
+        const text = await res.text();
+        showRaw(`HTTP ${res.status} ${res.statusText}\n\n` + text);
 
-        // Find Nationwide totals
-        const nationwide = geojson.features.find(f => (f.properties.region || "").toUpperCase() === "NATIONWIDE");
-        if (nationwide) {
-          const np = nationwide.properties;
-          document.getElementById('nat-strikers').textContent = np.strikers || 0;
-          document.getElementById('nat-percent').textContent = (np.strike_percent || 0) + "%";
-          document.getElementById('nat-wage').textContent = "$" + (np.wage_demand || 0);
+        // quick check: if response looks like HTML (login page), warn
+        const trimmed = text.trim();
+        if (trimmed.startsWith('<') || /<html/i.test(trimmed)){
+          setStatus('failed: HTML returned (likely not public / permission/login page)');
+          hintsEl.textContent = 'Response is HTML. Likely causes: Apps Script not deployed as Web App to "Anyone, even anonymous", or you are not using the published web app URL. Redeploy and select "Anyone, even anonymous".';
+          return;
         }
 
-        // ✅ Now feed only the GeoJSON to mapbox
-        map.addSource('regions', { type: 'geojson', data: geojson });
+        // parse JSON
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch(parseErr){
+          setStatus('failed: JSON parse error');
+          hintsEl.textContent = 'Could not parse JSON. Look at raw response above. If it contains HTML, see the note about deployment/permissions.';
+          return;
+        }
 
-        map.addLayer({
-          id: 'regions-fill',
-          type: 'fill',
-          source: 'regions',
-          paint: {
-            'fill-color': [
-              'interpolate',
-              ['linear'],
-              ['to-number', ['get', 'strike_percent'], 0],
-              0, '#cccccc',
-              5, '#f4a6a6',
-              15, '#d12c0f'
-            ],
-            'fill-opacity': 0.8
+        showJSON(data);
+
+        // check for error object returned by Apps Script
+        if (data.error){
+          setStatus('apps script error');
+          hintsEl.textContent = 'Apps Script returned an error: ' + data.error;
+          return;
+        }
+
+        // expect data.geojson
+        const geojson = data.geojson || data;
+        if (!geojson || !geojson.features || !Array.isArray(geojson.features)){
+          setStatus('invalid geojson');
+          hintsEl.textContent = 'No geojson.features found in API response. Response keys: ' + Object.keys(data).join(', ');
+          return;
+        }
+
+        setStatus('geojson ok — features: ' + geojson.features.length);
+
+        // log first few properties in panel
+        const sample = geojson.features.slice(0,8).map((f,i) => {
+          return `#${i} region="${(f.properties && (f.properties.region||f.properties.name))||'[none]'}" — props: ${JSON.stringify(f.properties).slice(0,400)}`;
+        }).join('\n\n');
+        showGeo(`features: ${geojson.features.length}\n\n${sample}`);
+
+        // Update economic metrics (data.economicImpact expected)
+        const impact = (data.economicImpact || data.economicimpact || []);
+        if (Array.isArray(impact) && impact.length){
+          impact.forEach(entry => {
+            if (!entry || !entry.metric) return;
+            const m = (''+entry.metric).toLowerCase();
+            const v = entry.current_value;
+            if (m.includes('productivity')) document.getElementById('prod').textContent = (v===null||v===undefined)?'—':String(v);
+            else if (m.includes('closing')) document.getElementById('close').textContent = (v===null||v===undefined)?'—':String(v);
+            else if (m.includes('confidence')) document.getElementById('conf').textContent = (v===null||v===undefined)?'—':String(v);
+            else if (m.includes('inflation')) document.getElementById('infl').textContent = (v===null||v===undefined)?'—':String(v);
+            else if (m.includes('wage')) document.getElementById('wage').textContent = (v===null||v===undefined)?'—':String(v);
+          });
+        } else {
+          // if missing, clear them
+          document.getElementById('prod').textContent='—';
+          document.getElementById('close').textContent='—';
+          document.getElementById('conf').textContent='—';
+          document.getElementById('infl').textContent='—';
+          document.getElementById('wage').textContent='—';
+        }
+
+        // Nationwide feature search (case-insensitive)
+        const nationwide = geojson.features.find(f => {
+          const r = (f.properties && (f.properties.region || f.properties.name || '') ).toString().trim().toUpperCase();
+          return r === 'NATIONWIDE' || r === '—' || r === 'NATIONAL' ;
+        });
+
+        if (nationwide && nationwide.properties){
+          const np = nationwide.properties;
+          document.getElementById('nat-strikers').textContent = (np.strikers === undefined || np.strikers === null) ? '0' : String(np.strikers);
+          document.getElementById('nat-percent').textContent = fmtPercentRaw(np.strike_percent);
+          document.getElementById('nat-wage').textContent = fmtMoney(np.wage_demand);
+        } else {
+          document.getElementById('nat-strikers').textContent = '0';
+          document.getElementById('nat-percent').textContent = '0%';
+          document.getElementById('nat-wage').textContent = '$0';
+        }
+
+        // Add or update GeoJSON source for Mapbox
+        try {
+          if (map.getSource('regions')) {
+            map.getSource('regions').setData(geojson);
+          } else {
+            map.addSource('regions', { type: 'geojson', data: geojson });
           }
-        });
+        } catch (srcErr){
+          console.error('source error', srcErr);
+          setStatus('map source error');
+          hintsEl.textContent = 'Error adding geojson source to Mapbox: ' + (srcErr && srcErr.message);
+          return;
+        }
 
-        map.addLayer({
-          id: 'regions-outline',
-          type: 'line',
-          source: 'regions',
-          paint: { 'line-color': '#000', 'line-width': 1 }
-        });
+        // Add layers if not present
+        if (!map.getLayer('regions-fill')) {
+          map.addLayer({
+            id: 'regions-fill',
+            type: 'fill',
+            source: 'regions',
+            paint: {
+              'fill-color': [
+                'interpolate',
+                ['linear'],
+                ['to-number', ['get', 'strike_percent'], 0],
+                0, '#cccccc',
+                5, '#f4a6a6',
+                15, '#d12c0f'
+              ],
+              'fill-opacity': 0.8
+            }
+          }, /* beforeId */ undefined);
+        }
 
-        // Popup
-        const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
+        if (!map.getLayer('regions-outline')) {
+          map.addLayer({
+            id: 'regions-outline',
+            type: 'line',
+            source: 'regions',
+            paint: { 'line-color': '#000', 'line-width': 1 }
+          });
+        }
 
+        // Setup popup interactions (replace any previous)
+        const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
         map.on('mousemove', 'regions-fill', e => {
-          const p = e.features[0].properties;
+          if (!e.features || !e.features[0]) return;
+          const p = e.features[0].properties || {};
           popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region || 'Unknown Region'}</strong><br/>
-              <b>Strikers:</b> ${p.strikers || 'N/A'}<br/>
-              <b>Strike % of Population:</b> ${p.strike_percent || '0'}%<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output || 'N/A'}<br/>
-              <b>Wage Demand ($):</b> ${p.wage_demand || 'N/A'}<br/>
-              <b>Notes:</b> ${p.notes || 'None'}
+              <strong>${p.region || p.name || 'Region'}</strong><br/>
+              <b>Strikers:</b> ${p.strikers ?? 'N/A'}<br/>
+              <b>Strike % of Population:</b> ${p.strike_percent ?? '0'}<br/>
+              <b>Adjusted Output:</b> ${p.adjusted_output ?? 'N/A'}<br/>
+              <b>Wage Demand ($):</b> ${p.wage_demand ?? 'N/A'}<br/>
+              <b>Notes:</b> ${p.notes ?? 'None'}
             `).addTo(map);
         });
+        map.on('mouseleave','regions-fill',()=>popup.remove());
 
-        map.on('mouseleave', 'regions-fill', () => popup.remove());
+        setStatus('done');
+        hintsEl.textContent = 'Success — map updated with geojson. If something looks off, check the "Parsed JSON preview" above and ensure region names in your GeoJSON match the spreadsheet COM_REGION values (case-insensitive matching used for Nationwide only).';
 
       } catch (err) {
-        console.error('Map load error:', err);
-        document.getElementById('map').innerHTML =
-          '<p style="color:red;text-align:center;">Map failed to load</p>';
+        console.error('Fetch/render error', err);
+        setStatus('error');
+        hintsEl.textContent = 'Fetch/render exception: ' + (err && err.message);
       }
+    }
+
+    // initial fetch when map is loaded (map.on('load') to ensure style ready)
+    map.on('load', () => {
+      fetchAndRender();
     });
+
+    // initial small UX touch: add keyboard refresh (R)
+    window.addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') fetchAndRender(); });
+
   </script>
 </body>
 </html>
