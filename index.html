@@ -106,14 +106,14 @@
         const res=await fetch('https://script.google.com/macros/s/AKfycbwGj6JSMumK1BGaXJGJ5KJJjVgj4sBkyY65EKwQvtM2_xfmUzSkuz3OYY4Hd3-p5XZilg/exec');
         const data=await res.json();
 
-        // Split metrics & polygons
-        const regionFeatures=data.features.filter(f=>f.properties.sheet==='StrikeTracker');
-        const impactFeatures=data.features.filter(f=>f.properties.sheet==='ECONOMIC IMPACT');
+        // Split metrics & polygons (FIXED)
+        const regionFeatures = data.features.filter(f=>f.properties.sheet==='StrikeTracker');
+        const impactFeatures = data.economicImpact || [];
 
         // Update metrics bar
         impactFeatures.forEach(f=>{
-          const m=f.properties.metric.toLowerCase();
-          const v=f.properties.current_value;
+          const m=f.metric.toLowerCase();
+          const v=f.current_value;
           if(m.includes('productivity')) document.getElementById('prod').textContent=v;
           else if(m.includes('closing')) document.getElementById('close').textContent=v;
           else if(m.includes('confidence')) document.getElementById('conf').textContent=v;
