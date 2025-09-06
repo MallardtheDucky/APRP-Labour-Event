@@ -8,12 +8,12 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.13.0/mapbox-gl.css" rel="stylesheet"/>
   <style>
     body { margin:0; padding:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; }
-    #map { position:absolute; top:220px; bottom:0; width:100%; transition:top 0.3s ease; }
+    #map { position:absolute; top:220px; bottom:0; width:100%; }
     #header {
       position:absolute; top:0; left:0; right:0;
       background:#222; color:white; padding:12px 18px;
       z-index:1000; display:flex; flex-direction:column; align-items:center;
-      height:220px; overflow:hidden; transition:transform 0.3s ease;
+      height:220px;
     }
     .title { font-size:22px; font-weight:700; margin-bottom:8px; text-align:center; }
     .metrics-container{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;max-width:1100px}
@@ -23,7 +23,6 @@
     .nationwide-container{ display:flex; gap:28px; margin-top:10px; justify-content:center }
     .nationwide-label{ font-size:13px; font-weight:700; color:#ffd57a }
     .nationwide-value{ font-size:16px; color:#ffd57a; margin-top:4px }
-    #toggle-header{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:none; border:none; color:white; font-size:22px; cursor:pointer }
     .legend{ position:absolute; bottom:20px; right:20px; background:white; padding:10px; border-radius:6px; font-size:12px }
     .legend span{ display:inline-block; width:12px; height:12px; margin-right:6px }
     #refresh { position: absolute; top:10px; right:10px; z-index:1200; padding:6px 10px; border-radius:6px; background:#1e90ff; color:white; border:none; cursor:pointer; }
@@ -32,7 +31,6 @@
 <body>
   <div id="header">
     <div class="title">Live Labour Strikes Map</div>
-
     <div class="metrics-container" id="metrics">
       <div class="metric"><div class="metric-label">Productivity Growth %</div><div class="metric-value" id="prod">—</div></div>
       <div class="metric"><div class="metric-label">Business Closings %</div><div class="metric-value" id="close">—</div></div>
@@ -40,18 +38,14 @@
       <div class="metric"><div class="metric-label">Inflation %</div><div class="metric-value" id="infl">—</div></div>
       <div class="metric"><div class="metric-label">Wage Growth (avg $)</div><div class="metric-value" id="wage">—</div></div>
     </div>
-
     <div class="nationwide-container">
       <div class="nationwide"><div class="nationwide-label">Nationwide Strikers</div><div class="nationwide-value" id="nat-strikers">—</div></div>
       <div class="nationwide"><div class="nationwide-label">Strike % of Population</div><div class="nationwide-value" id="nat-percent">—</div></div>
       <div class="nationwide"><div class="nationwide-label">Wage Demand ($)</div><div class="nationwide-value" id="nat-wage">—</div></div>
     </div>
-
-    <button id="toggle-header" title="Toggle header visibility">▲</button>
   </div>
 
-  <button id="refresh" title="Refresh data">Refresh</button>
-
+  <button id="refresh">Refresh</button>
   <div id="map"></div>
 
   <div class="legend">
@@ -61,136 +55,118 @@
   </div>
 
   <script>
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxbiHJ4rw5GmmLgiwHuNRgcULKG6D_SRp1WN6cHx134_-qoD1O_tiXaTIcd4kb_okyvGw/exec';
-    const GEOJSON_URL = 'regions.geojson'; // your static geojson file
-    mapboxgl.accessToken = 'pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg';
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxbiHJ4rw5GmmLgiwHuNRgcULKG6D_SRp1WN6cHx134_-qoD1O_tiXaTIcd4kb_okyvGw/exec";
+    mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg";
 
     const map = new mapboxgl.Map({
-      container: 'map',
-      style: 'mapbox://styles/mapbox/light-v10',
+      container: "map",
+      style: "mapbox://styles/mapbox/light-v10",
       center: [-98.5795, 39.8283],
       zoom: 3
     });
 
-    const toggleButton = document.getElementById('toggle-header');
-    const header = document.getElementById('header');
-    const mapDiv = document.getElementById('map');
-    toggleButton.addEventListener('click', () => {
-      header.classList.toggle('hidden');
-      mapDiv.classList.toggle('full');
-      toggleButton.innerHTML = header.classList.contains('hidden') ? '▼' : '▲';
-      map.resize();
-    });
-
     function fmtPercent(v){
-      if (v === null || v === undefined || v === '') return '0%';
-      const num = Number(v);
-      if (isNaN(num)) return String(v);
-      if (Math.abs(num) > 0 && Math.abs(num) <= 1) return (num*100).toFixed(2) + '%';
-      return num.toFixed(2) + '%';
+      if (!v) return "0%";
+      const num = Number(String(v).replace("%",""));
+      if (isNaN(num)) return v;
+      return num.toFixed(2) + "%";
     }
     function fmtMoney(v){
-      if (v === null || v === undefined || v === '') return '$0';
-      const num = Number(v);
-      if (isNaN(num)) return String(v);
-      return '$' + num.toLocaleString();
+      if (!v) return "$0";
+      const num = Number(String(v).replace(/[^0-9.\-]/g,""));
+      if (isNaN(num)) return v;
+      return "$" + num.toLocaleString();
     }
 
     async function fetchAndRender(){
       try {
-        const [geoRes, apiRes] = await Promise.all([
-          fetch(GEOJSON_URL),
-          fetch(APPS_SCRIPT_URL + '?_=' + Date.now())
-        ]);
-        const geojson = await geoRes.json();
-        const data = await apiRes.json();
+        const res = await fetch(APPS_SCRIPT_URL + "?_=" + Date.now());
+        const data = await res.json();
 
-        // Build lookup table from API
-        const strikeData = {};
-        (data.strikeTracker || []).forEach(r => {
-          strikeData[r.region.toUpperCase()] = r;
-        });
-
-        // Merge into GeoJSON
-        geojson.features.forEach(f => {
-          const regionKey = (f.properties.region || f.properties.name || '').toUpperCase();
-          if (strikeData[regionKey]) {
-            Object.assign(f.properties, strikeData[regionKey]);
-          }
-        });
+        const geojson = data.geojson || data;
+        if (!geojson || !geojson.features) return;
 
         // Economic metrics
         (data.economicImpact || []).forEach(entry => {
-          if (!entry || !entry.metric) return;
+          if (!entry.metric) return;
           const m = entry.metric.toLowerCase();
           const v = entry.current_value;
-          if (m.includes('productivity')) document.getElementById('prod').textContent = v;
-          else if (m.includes('closing')) document.getElementById('close').textContent = v;
-          else if (m.includes('confidence')) document.getElementById('conf').textContent = v;
-          else if (m.includes('inflation')) document.getElementById('infl').textContent = v;
-          else if (m.includes('wage')) document.getElementById('wage').textContent = v;
+          if (m.includes("productivity")) document.getElementById("prod").textContent = v;
+          else if (m.includes("closing")) document.getElementById("close").textContent = v;
+          else if (m.includes("confidence")) document.getElementById("conf").textContent = v;
+          else if (m.includes("inflation")) document.getElementById("infl").textContent = v;
+          else if (m.includes("wage")) document.getElementById("wage").textContent = v;
         });
 
         // Nationwide stats
-        const nationwide = geojson.features.find(f => (f.properties.region || '').toUpperCase() === 'NATIONWIDE');
+        const nationwide = geojson.features.find(f => 
+          (f.properties.region || f.properties.name || "").toString().trim().toUpperCase() === "NATIONWIDE"
+        );
         if (nationwide) {
           const np = nationwide.properties;
-          document.getElementById('nat-strikers').textContent = np.strikers ?? '0';
-          document.getElementById('nat-percent').textContent = fmtPercent(np.strike_percent);
-          document.getElementById('nat-wage').textContent = fmtMoney(np.wage_demand);
+          document.getElementById("nat-strikers").textContent = np.strikers ?? "0";
+          document.getElementById("nat-percent").textContent = fmtPercent(np.strike_percent);
+          document.getElementById("nat-wage").textContent = fmtMoney(np.wage_demand);
         }
 
-        // Update or add source
-        if (map.getSource('regions')) {
-          map.getSource('regions').setData(geojson);
+        // Merge: normalize region names
+        geojson.features.forEach(f => {
+          if (!f.properties) f.properties = {};
+          if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
+          if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
+        });
+
+        if (map.getSource("regions")) {
+          map.getSource("regions").setData(geojson);
         } else {
-          map.addSource('regions', { type: 'geojson', data: geojson });
+          map.addSource("regions", { type:"geojson", data:geojson });
           map.addLayer({
-            id: 'regions-fill',
-            type: 'fill',
-            source: 'regions',
-            paint: {
-              'fill-color': [
-                'interpolate',
-                ['linear'],
-                ['to-number', ['get', 'strike_percent'], 0],
-                0, '#cccccc',
-                0.01, '#f4a6a6',
-                0.05, '#d12c0f'
+            id:"regions-fill",
+            type:"fill",
+            source:"regions",
+            paint:{
+              "fill-color":[
+                "interpolate",["linear"],
+                ["to-number",["get","strike_percent"],0],
+                0,"#cccccc",
+                5,"#f4a6a6",
+                15,"#d12c0f"
               ],
-              'fill-opacity': 0.8
+              "fill-opacity":0.8
             }
           });
           map.addLayer({
-            id: 'regions-outline',
-            type: 'line',
-            source: 'regions',
-            paint: { 'line-color': '#000', 'line-width': 1 }
+            id:"regions-outline",
+            type:"line",
+            source:"regions",
+            paint:{ "line-color":"#000", "line-width":1 }
           });
         }
 
         // Popup
         const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
-        map.on('mousemove', 'regions-fill', e => {
+        map.on("mousemove", "regions-fill", e => {
           if (!e.features || !e.features[0]) return;
           const p = e.features[0].properties || {};
           popup.setLngLat(e.lngLat)
             .setHTML(`
-              <strong>${p.region || 'Region'}</strong><br/>
-              <b>Strikers:</b> ${p.strikers ?? 'N/A'}<br/>
+              <strong>${p.region || p.name || "Region"}</strong><br/>
+              <b>Strikers:</b> ${p.strikers ?? "N/A"}<br/>
               <b>Strike % of Population:</b> ${fmtPercent(p.strike_percent)}<br/>
-              <b>Adjusted Output:</b> ${p.adjusted_output ?? 'N/A'}<br/>
+              <b>Adjusted Output:</b> ${p.adjusted_output ?? "N/A"}<br/>
               <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
-              <b>Notes:</b> ${p.notes ?? 'None'}
+              <b>Notes:</b> ${p.notes ?? "None"}
             `).addTo(map);
         });
-        map.on('mouseleave','regions-fill',()=>popup.remove());
+        map.on("mouseleave","regions-fill",()=>popup.remove());
 
-      } catch(err){ console.error(err); }
+      } catch(err){
+        console.error("Fetch/render failed:", err);
+      }
     }
 
-    document.getElementById('refresh').addEventListener('click', fetchAndRender);
-    map.on('load', fetchAndRender);
+    document.getElementById("refresh").addEventListener("click", fetchAndRender);
+    map.on("load", fetchAndRender);
   </script>
 </body>
 </html>
