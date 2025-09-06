@@ -20,6 +20,7 @@
       font-size:12px; font-family:Arial, sans-serif;
       position:absolute; bottom:20px; left:20px;
       border-radius:6px; box-shadow:0 0 4px rgba(0,0,0,0.3);
+      max-width:200px;
     }
     .legend h4 { margin:0 0 4px; font-size:14px; }
     .legend div { margin:2px 0; }
@@ -27,6 +28,8 @@
       display:inline-block; width:14px; height:14px;
       margin-right:4px; vertical-align:middle;
     }
+    .legend hr { margin:6px 0; }
+    .legend h5 { margin:4px 0; font-size:13px; }
   </style>
 </head>
 <body>
@@ -35,13 +38,16 @@
 <div class="legend" id="legend"><h4>Strike % of Population</h4></div>
 
 <script>
-mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg"; // 🔴 Replace with your actual token
+mapboxgl.accessToken = "pk.eyJ1IjoiNW00Y2s3NyIsImEiOiJjbWI4eXFqeDkwbzY1MmpwcDFzZDIwMmVqIn0.6JGe7JWhk28z5D3TLIJQwg";
 
+// Flat map, no pitch or bearing
 const map = new mapboxgl.Map({
   container: "map",
   style: "mapbox://styles/mapbox/light-v11",
   center: [-98, 39],
-  zoom: 3
+  zoom: 3,
+  pitch: 0,
+  bearing: 0
 });
 
 // ---- Helpers ----
@@ -132,7 +138,7 @@ map.on("load", async () => {
   // ---- Nationwide ----
   if (data.nationwide) {
     legend.innerHTML += `
-      <hr/><strong>Nationwide</strong><br/>
+      <hr/><h5>Nationwide Totals</h5>
       Strikers: ${fmtNum(data.nationwide.strikers)}<br/>
       Strike %: ${fmtPercent(data.nationwide.strike_percent)}<br/>
       Wage Demand: ${fmtMoney(data.nationwide.wage_demand)}
