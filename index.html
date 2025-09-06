@@ -103,10 +103,10 @@
     // Fetch and load map data
     map.on('load',async()=>{
       try {
-        const res=await fetch('https://script.google.com/macros/s/AKfycbwGj6JSMumK1BGaXJGJ5KJJjVgj4sBkyY65EKwQvtM2_xfmUzSkuz3OYY4Hd3-p5XZilg/exec');
+        const res=await fetch('https://script.google.com/macros/s/AKfycbzWuh0IYT9yL36FqjPdQR70fJx8fMWX5FHQvT5eQy5wNrG0DiNx4q5rUXi2b4tMgEyUcw/exec');
         const data=await res.json();
 
-        // Split metrics & polygons (FIXED)
+        // Split metrics & polygons
         const regionFeatures = data.features.filter(f=>f.properties.sheet==='StrikeTracker');
         const impactFeatures = data.economicImpact || [];
 
