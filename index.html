@@ -9,12 +9,7 @@
   <style>
     body { margin:0; padding:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; }
     #map { position:absolute; top:220px; bottom:0; width:100%; transition:top 0.3s ease; }
-    #header {
-      position:absolute; top:0; left:0; right:0;
-      background:#222; color:white; padding:12px 18px;
-      z-index:1000; display:flex; flex-direction:column; align-items:center;
-      height:220px; overflow:hidden; transition:transform 0.3s ease;
-    }
+    #header { position:absolute; top:0; left:0; right:0; background:#222; color:white; padding:12px 18px; z-index:1000; display:flex; flex-direction:column; align-items:center; height:220px; overflow:hidden; transition:transform 0.3s ease; }
     .title { font-size:22px; font-weight:700; margin-bottom:8px; text-align:center; }
     .metrics-container{display:flex;flex-wrap:wrap;justify-content:center;gap:28px;max-width:1100px}
     .metric{ text-align:center }
@@ -88,7 +83,7 @@
       return isNaN(num) ? v : "$" + Math.round(num).toLocaleString();
     }
     function fmtNumber(v){
-      if (!v) return "0";
+      if (v === null || v === undefined || v === '') return "0";
       const num = Number(v);
       return isNaN(num) ? v : num.toLocaleString();
     }
@@ -109,15 +104,48 @@
       map.resize();
     });
 
+    // Utility: safe uppercase
+    const u = s => (s === null || s === undefined) ? "" : String(s).toString().trim().toUpperCase();
+
     // Fetch + render
     async function fetchAndRender(){
+      // set a visual loading state (optional)
+      document.getElementById('nat-strikers').textContent = 'Loading...';
+      document.getElementById('nat-percent').textContent = 'Loading...';
+      document.getElementById('nat-wage').textContent = 'Loading...';
+
       try {
         const res = await fetch(APPS_SCRIPT_URL + "?_=" + Date.now());
-        const data = await res.json();
-        const geojson = data.geojson || data;
-        if (!geojson || !geojson.features) return;
 
-        // Economic metrics
+        // robust JSON parsing: try res.json(), fallback to parsing text
+        let data;
+        try {
+          data = await res.json();
+        } catch (err) {
+          const txt = await res.text();
+          console.warn("Primary JSON parse failed; raw text:", txt);
+          try {
+            data = JSON.parse(txt);
+          } catch(e2) {
+            console.error("Failed to parse response as JSON:", e2);
+            // show user-friendly fallback
+            document.getElementById('nat-strikers').textContent = '—';
+            document.getElementById('nat-percent').textContent = '—';
+            document.getElementById('nat-wage').textContent = '—';
+            return;
+          }
+        }
+
+        console.log("Fetched API response:", data);
+
+        // ensure geojson exists
+        const geojson = (data && data.geojson) ? data.geojson : null;
+        if (!geojson || !geojson.features || !Array.isArray(geojson.features)) {
+          console.warn("No geojson.features present in response; aborting map render.");
+          // but still try to extract nationwide from normalizedData if present
+        }
+
+        // Economic metrics (unchanged)
         (data.economicImpact || []).forEach(entry => {
           if (!entry || !entry.metric) return;
           const m = entry.metric.toLowerCase();
@@ -129,76 +157,170 @@
           else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
-        // Nationwide stats (from normalizedData, not geojson)
-        if (data.normalizedData) {
-          const nationwide = data.normalizedData.find(r => r.region && r.region.toString().trim().toUpperCase() === "NATIONWIDE");
-          if (nationwide) {
-            document.getElementById('nat-strikers').textContent = fmtNumber(nationwide.strikers);
-            document.getElementById('nat-percent').textContent = fmtPercent(nationwide.strike_percent);
-            document.getElementById('nat-wage').textContent = fmtMoney(nationwide.wage_demand);
+        // --- Find nationwide ---
+        let nationwide = null;
+        const nd = data.normalizedData;
+
+        if (nd !== undefined && nd !== null) {
+          if (Array.isArray(nd)) {
+            console.log("normalizedData is an array; regions:", nd.map(x => u(x.region)).slice(0,50));
+            nationwide = nd.find(r => u(r.region) === "NATIONWIDE");
+            if (nationwide) console.log("Found NATIONWIDE in normalizedData (array):", nationwide);
+          } else if (typeof nd === "object") {
+            console.log("normalizedData is an object:", nd.region ? u(nd.region) : nd);
+            if (u(nd.region) === "NATIONWIDE") {
+              nationwide = nd;
+              console.log("Found NATIONWIDE in normalizedData (object):", nationwide);
+            }
+          } else {
+            console.log("normalizedData present but not array/object:", nd);
+          }
+        } else {
+          console.log("normalizedData not present on response.");
+        }
+
+        // Fallback: search geojson.features for a NATIONWIDE properties entry
+        if (!nationwide && geojson && Array.isArray(geojson.features)) {
+          const foundFeat = geojson.features.find(f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE");
+          if (foundFeat) {
+            nationwide = foundFeat.properties;
+            console.log("Found NATIONWIDE in geojson.features:", nationwide);
+          } else {
+            console.log("No NATIONWIDE in geojson.features.");
           }
         }
 
-        // Normalize region props
-        geojson.features.forEach(f => {
-          if (!f.properties) f.properties = {};
-          if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
-          if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
-          if (f.properties.strike_percent) f.properties.strike_percent = Number(f.properties.strike_percent);
-          if (f.properties.adjusted_output) f.properties.adjusted_output = Number(f.properties.adjusted_output);
-        });
-
-        // Map source + layers
-        if (map.getSource('regions')) {
-          map.getSource('regions').setData(geojson);
-        } else {
-          map.addSource('regions', { type: 'geojson', data: geojson });
-          map.addLayer({
-            id: 'regions-fill',
-            type: 'fill',
-            source: 'regions',
-            paint: {
-              'fill-color': [
-                'interpolate',
-                ['linear'],
-                ['to-number', ['get', 'strike_percent'], 0],
-                0, '#cccccc',
-                2, '#f2f0a6',
-                5, '#f4a6a6',
-                10, '#ff7f50',
-                20, '#d12c0f',
-                40, '#800000'
-              ],
-              'fill-opacity': 0.8
+        // Final fallback: build an aggregate nationwide from normalizedData or from features
+        if (!nationwide) {
+          // If normalizedData is an array, aggregate
+          if (Array.isArray(nd) && nd.length > 0) {
+            const agg = nd.reduce((acc, cur) => {
+              const pop = Number(cur.population) || 0;
+              const str = Number(cur.strikers) || 0;
+              acc.population += pop;
+              acc.strikers += str;
+              // keep last non-empty wage_demand if present
+              if (cur.wage_demand) acc.wage_demand = cur.wage_demand;
+              return acc;
+            }, { region: 'NATIONWIDE', population:0, strikers:0, wage_demand: null });
+            if (agg.population > 0) {
+              agg.strike_percent = Math.round((agg.strikers / agg.population) * 10000) / 100; // 2 decimals %
+            } else {
+              agg.strike_percent = 0;
             }
-          });
-          map.addLayer({
-            id: 'regions-outline',
-            type: 'line',
-            source: 'regions',
-            paint: { 'line-color': '#000', 'line-width': 1 }
-          });
+            // only use the aggregate if it actually collected something
+            if (agg.population > 0 || agg.strikers > 0) {
+              nationwide = agg;
+              console.log("Built aggregate NATIONWIDE from normalizedData:", nationwide);
+            }
+          }
+          // If still not found and geojson.features exist, try aggregating features
+          if (!nationwide && geojson && Array.isArray(geojson.features)) {
+            const agg2 = geojson.features.reduce((acc, f) => {
+              const p = f.properties || {};
+              const pop = Number(p.population) || 0;
+              const str = Number(p.strikers) || 0;
+              acc.population += pop;
+              acc.strikers += str;
+              if (p.wage_demand) acc.wage_demand = p.wage_demand;
+              return acc;
+            }, { region: 'NATIONWIDE', population:0, strikers:0, wage_demand: null });
+            if (agg2.population > 0 || agg2.strikers > 0) {
+              agg2.strike_percent = agg2.population > 0 ? Math.round((agg2.strikers / agg2.population) * 10000) / 100 : 0;
+              nationwide = agg2;
+              console.log("Built aggregate NATIONWIDE from geojson.features:", nationwide);
+            }
+          }
         }
 
-        // Popup
-        const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
-        map.on('mousemove', 'regions-fill', e => {
-          if (!e.features || !e.features[0]) return;
-          const p = e.features[0].properties || {};
-          popup.setLngLat(e.lngLat)
-            .setHTML(`
-              <strong>${p.region || p.name || "Region"}</strong><br/>
-              <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
-              <b>Strike % of Population:</b> ${fmtPercent(p.strike_percent)}<br/>
-              <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
-              <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
-              <b>Notes:</b> ${p.notes ?? "None"}
-            `).addTo(map);
-        });
-        map.on('mouseleave','regions-fill',()=>popup.remove());
+        // Inject nationwide values in the UI if present
+        if (nationwide) {
+          // handle strike_percent being a fraction (0.35) vs percent (35)
+          let sp = Number(nationwide.strike_percent);
+          if (!isNaN(sp) && sp !== 0 && Math.abs(sp) < 1) sp = sp * 100;
+          document.getElementById('nat-strikers').textContent = fmtNumber(nationwide.strikers);
+          document.getElementById('nat-percent').textContent = fmtPercent(sp);
+          document.getElementById('nat-wage').textContent = fmtMoney(nationwide.wage_demand);
+        } else {
+          console.warn("Nationwide data not found after all fallbacks.");
+          document.getElementById('nat-strikers').textContent = '—';
+          document.getElementById('nat-percent').textContent = '—';
+          document.getElementById('nat-wage').textContent = '—';
+        }
+
+        // --- Normalize region props in geojson.features (for map & popup) ---
+        if (geojson && Array.isArray(geojson.features)) {
+          geojson.features.forEach(f => {
+            if (!f.properties) f.properties = {};
+            if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
+            if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
+            if (f.properties.strike_percent !== undefined && f.properties.strike_percent !== null) {
+              // leave numeric value as-is; popup/legend will scale display
+              f.properties.strike_percent = Number(f.properties.strike_percent);
+            }
+            if (f.properties.adjusted_output !== undefined && f.properties.adjusted_output !== null) {
+              f.properties.adjusted_output = Number(f.properties.adjusted_output);
+            }
+          });
+
+          // Map source + layers
+          if (map.getSource('regions')) {
+            map.getSource('regions').setData(geojson);
+          } else {
+            map.addSource('regions', { type: 'geojson', data: geojson });
+            map.addLayer({
+              id: 'regions-fill',
+              type: 'fill',
+              source: 'regions',
+              paint: {
+                'fill-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['to-number', ['get', 'strike_percent'], 0],
+                  0, '#cccccc',
+                  2, '#f2f0a6',
+                  5, '#f4a6a6',
+                  10, '#ff7f50',
+                  20, '#d12c0f',
+                  40, '#800000'
+                ],
+                'fill-opacity': 0.8
+              }
+            });
+            map.addLayer({
+              id: 'regions-outline',
+              type: 'line',
+              source: 'regions',
+              paint: { 'line-color': '#000', 'line-width': 1 }
+            });
+          }
+
+          // Popup
+          const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
+          map.on('mousemove', 'regions-fill', e => {
+            if (!e.features || !e.features[0]) return;
+            const p = e.features[0].properties || {};
+            // adjust percent for display (if provided as fraction)
+            let psp = p.strike_percent;
+            if (psp !== undefined && psp !== null && Math.abs(Number(psp)) < 1) psp = Number(psp) * 100;
+            popup.setLngLat(e.lngLat)
+              .setHTML(`
+                <strong>${p.region || p.name || "REGION"}</strong><br/>
+                <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
+                <b>Strike % of Population:</b> ${fmtPercent(psp)}<br/>
+                <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
+                <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
+                <b>Notes:</b> ${p.notes ?? "None"}
+              `).addTo(map);
+          });
+          map.on('mouseleave','regions-fill',()=>popup.remove());
+        }
 
       } catch(err){
         console.error("Fetch/render failed:", err);
+        document.getElementById('nat-strikers').textContent = '—';
+        document.getElementById('nat-percent').textContent = '—';
+        document.getElementById('nat-wage').textContent = '—';
       }
     }
 
