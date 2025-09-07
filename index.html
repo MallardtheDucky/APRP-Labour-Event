@@ -115,24 +115,18 @@
 
       try {
         const res = await fetch(APPS_SCRIPT_URL + "?_=" + Date.now());
-
         let data;
         try {
           data = await res.json();
         } catch (err) {
           const txt = await res.text();
-          try {
-            data = JSON.parse(txt);
-          } catch(e2) {
-            document.getElementById('nat-strikers').textContent = '—';
-            document.getElementById('nat-percent').textContent = '—';
-            document.getElementById('nat-wage').textContent = '—';
-            return;
-          }
+          try { data = JSON.parse(txt); }
+          catch(e2){ return; }
         }
 
         const geojson = (data && data.geojson) ? data.geojson : null;
 
+        // Economic metrics
         (data.economicImpact || []).forEach(entry => {
           if (!entry || !entry.metric) return;
           const m = entry.metric.toLowerCase();
@@ -144,37 +138,26 @@
           else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
-        // --- Nationwide detection logic (robust) ---
+        // --- Nationwide ---
         let nationwide = null;
         const nd = data.normalizedData;
-
-        if (Array.isArray(nd)) {
-          nationwide = nd.find(r => u(r.region) === "NATIONWIDE");
-        } else if (typeof nd === "object" && nd) {
-          if (u(nd.region) === "NATIONWIDE") nationwide = nd;
-        }
-        if (!nationwide && data.nationwide) {
-          nationwide = data.nationwide;
+        if (nd) {
+          if (Array.isArray(nd)) nationwide = nd.find(r => u(r.region) === "NATIONWIDE");
+          else if (typeof nd === "object" && u(nd.region) === "NATIONWIDE") nationwide = nd;
         }
         if (!nationwide && geojson && Array.isArray(geojson.features)) {
-          const foundFeat = geojson.features.find(
-            f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE"
-          );
-          if (foundFeat) nationwide = foundFeat.properties;
+          const f = geojson.features.find(f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE");
+          if (f) nationwide = f.properties;
         }
-        // ------------------------------------------
 
         if (nationwide) {
           let sp = Number(nationwide.strike_percent);
           document.getElementById('nat-strikers').textContent = fmtNumber(nationwide.strikers);
-          document.getElementById('nat-percent').textContent = isNaN(sp) ? "—" : sp.toFixed(2) + "%";
+          document.getElementById('nat-percent').textContent = fmtPercent(sp);
           document.getElementById('nat-wage').textContent = fmtMoney(nationwide.wage_demand);
-        } else {
-          document.getElementById('nat-strikers').textContent = '—';
-          document.getElementById('nat-percent').textContent = '—';
-          document.getElementById('nat-wage').textContent = '—';
         }
 
+        // --- Normalize + render map ---
         if (geojson && Array.isArray(geojson.features)) {
           geojson.features.forEach(f => {
             if (!f.properties) f.properties = {};
@@ -182,9 +165,6 @@
             if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
             if (f.properties.strike_percent !== undefined && f.properties.strike_percent !== null) {
               f.properties.strike_percent = Number(f.properties.strike_percent);
-            }
-            if (f.properties.adjusted_output !== undefined && f.properties.adjusted_output !== null) {
-              f.properties.adjusted_output = Number(f.properties.adjusted_output);
             }
           });
 
@@ -223,11 +203,12 @@
           map.on('mousemove', 'regions-fill', e => {
             if (!e.features || !e.features[0]) return;
             const p = e.features[0].properties || {};
+            let psp = p.strike_percent;
             popup.setLngLat(e.lngLat)
               .setHTML(`
                 <strong>${p.region || p.name || "REGION"}</strong><br/>
                 <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
-                <b>Strike % of Population:</b> ${isNaN(p.strike_percent) ? "—" : Number(p.strike_percent).toFixed(2) + "%"}<br/>
+                <b>Strike % of Population:</b> ${fmtPercent(psp)}<br/>
                 <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
                 <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
                 <b>Notes:</b> ${p.notes ?? "None"}
@@ -235,11 +216,8 @@
           });
           map.on('mouseleave','regions-fill',()=>popup.remove());
         }
-
       } catch(err){
-        document.getElementById('nat-strikers').textContent = '—';
-        document.getElementById('nat-percent').textContent = '—';
-        document.getElementById('nat-wage').textContent = '—';
+        console.error("Fetch/render failed:", err);
       }
     }
 
