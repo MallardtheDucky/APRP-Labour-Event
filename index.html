@@ -51,7 +51,6 @@
   <button id="refresh" title="Refresh data">Refresh</button>
   <div id="map"></div>
 
-  <!-- Updated Legend -->
   <div class="legend">
     <div><span style="background:#cccccc"></span>No strikes (0%)</div>
     <div><span style="background:#f2f0a6"></span>Minimal (0–0.5%)</div>
@@ -110,7 +109,7 @@
 
     // Fetch + render
     async function fetchAndRender(){
-      // set loading state
+      // set a visual loading state (optional)
       document.getElementById('nat-strikers').textContent = 'Loading...';
       document.getElementById('nat-percent').textContent = 'Loading...';
       document.getElementById('nat-wage').textContent = 'Loading...';
@@ -118,17 +117,25 @@
       try {
         const res = await fetch(APPS_SCRIPT_URL + "?_=" + Date.now());
 
+        // robust JSON parsing
         let data;
         try {
           data = await res.json();
         } catch (err) {
           const txt = await res.text();
-          try { data = JSON.parse(txt); }
-          catch(e2) { return; }
+          try {
+            data = JSON.parse(txt);
+          } catch(e2) {
+            document.getElementById('nat-strikers').textContent = '—';
+            document.getElementById('nat-percent').textContent = '—';
+            document.getElementById('nat-wage').textContent = '—';
+            return;
+          }
         }
 
         const geojson = (data && data.geojson) ? data.geojson : null;
 
+        // Economic metrics
         (data.economicImpact || []).forEach(entry => {
           if (!entry || !entry.metric) return;
           const m = entry.metric.toLowerCase();
@@ -140,15 +147,56 @@
           else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
-        // Normalize features
+        // Nationwide extraction
+        let nationwide = null;
+        const nd = data.normalizedData;
+
+        if (Array.isArray(nd)) {
+          nationwide = nd.find(r => u(r.region) === "NATIONWIDE");
+        } else if (typeof nd === "object" && nd !== null) {
+          if (u(nd.region) === "NATIONWIDE") nationwide = nd;
+        }
+
+        if (!nationwide && geojson && Array.isArray(geojson.features)) {
+          const foundFeat = geojson.features.find(f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE");
+          if (foundFeat) nationwide = foundFeat.properties;
+        }
+
+        // Aggregate fallback
+        if (!nationwide && Array.isArray(nd) && nd.length > 0) {
+          const agg = nd.reduce((acc, cur) => {
+            const pop = Number(cur.population) || 0;
+            const str = Number(cur.strikers) || 0;
+            acc.population += pop;
+            acc.strikers += str;
+            if (cur.wage_demand) acc.wage_demand = cur.wage_demand;
+            return acc;
+          }, { region: 'NATIONWIDE', population:0, strikers:0, wage_demand: null });
+          if (agg.population > 0) {
+            agg.strike_percent = Math.round((agg.strikers / agg.population) * 10000) / 100;
+            nationwide = agg;
+          }
+        }
+
+        if (nationwide) {
+          let sp = Number(nationwide.strike_percent);
+          document.getElementById('nat-strikers').textContent = fmtNumber(nationwide.strikers);
+          document.getElementById('nat-percent').textContent = fmtPercent(sp);
+          document.getElementById('nat-wage').textContent = fmtMoney(nationwide.wage_demand);
+        } else {
+          document.getElementById('nat-strikers').textContent = '—';
+          document.getElementById('nat-percent').textContent = '—';
+          document.getElementById('nat-wage').textContent = '—';
+        }
+
+        // Normalize + render geojson
         if (geojson && Array.isArray(geojson.features)) {
           geojson.features.forEach(f => {
             if (!f.properties) f.properties = {};
             if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
             if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
-            if (f.properties.strike_percent !== undefined && f.properties.strike_percent !== null) {
-              f.properties.strike_percent = Number(f.properties.strike_percent);
-            }
+            if (f.properties.strike_percent !== undefined) f.properties.strike_percent = Number(f.properties.strike_percent);
+            if (f.properties.adjusted_output !== undefined) f.properties.adjusted_output = Number(f.properties.adjusted_output);
           });
 
           if (map.getSource('regions')) {
@@ -181,9 +229,30 @@
               paint: { 'line-color': '#000', 'line-width': 1 }
             });
           }
+
+          const popup = new mapboxgl.Popup({ closeButton:false, closeOnClick:false });
+          map.on('mousemove', 'regions-fill', e => {
+            if (!e.features || !e.features[0]) return;
+            const p = e.features[0].properties || {};
+            let psp = p.strike_percent;
+            if (psp !== undefined && psp !== null && Math.abs(Number(psp)) < 1) psp = Number(psp) * 100;
+            popup.setLngLat(e.lngLat)
+              .setHTML(`
+                <strong>${p.region || p.name || "REGION"}</strong><br/>
+                <b>Strikers:</b> ${fmtNumber(p.strikers)}<br/>
+                <b>Strike % of Population:</b> ${fmtPercent(psp)}<br/>
+                <b>Adjusted Output:</b> ${fmtDecimal(p.adjusted_output,2)}<br/>
+                <b>Wage Demand ($):</b> ${fmtMoney(p.wage_demand)}<br/>
+                <b>Notes:</b> ${p.notes ?? "None"}
+              `).addTo(map);
+          });
+          map.on('mouseleave','regions-fill',()=>popup.remove());
         }
+
       } catch(err){
-        console.error("Fetch/render failed:", err);
+        document.getElementById('nat-strikers').textContent = '—';
+        document.getElementById('nat-percent').textContent = '—';
+        document.getElementById('nat-wage').textContent = '—';
       }
     }
 
