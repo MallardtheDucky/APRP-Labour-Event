@@ -256,7 +256,9 @@
             if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
             if (f.properties.strike_percent !== undefined && f.properties.strike_percent !== null) {
               let sp = Number(f.properties.strike_percent);
-              if (sp > 0 && sp < 0.5) sp = sp * 100;
+              if (sp > 0 && sp < 0.01) {
+                sp = sp * 100;  // fractions less than 1% should be scaled
+              }
               f.properties.strike_percent = sp;
             }
             if (f.properties.adjusted_output !== undefined && f.properties.adjusted_output !== null) {
