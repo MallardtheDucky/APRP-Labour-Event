@@ -144,6 +144,7 @@
           else if (m.includes("wage")) document.getElementById("wage").textContent = fmtMoney(v);
         });
 
+        // --- Nationwide detection logic (robust) ---
         let nationwide = null;
         const nd = data.normalizedData;
 
@@ -152,11 +153,16 @@
         } else if (typeof nd === "object" && nd) {
           if (u(nd.region) === "NATIONWIDE") nationwide = nd;
         }
-
+        if (!nationwide && data.nationwide) {
+          nationwide = data.nationwide;
+        }
         if (!nationwide && geojson && Array.isArray(geojson.features)) {
-          const foundFeat = geojson.features.find(f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE");
+          const foundFeat = geojson.features.find(
+            f => u((f.properties && (f.properties.region || f.properties.name)) || "") === "NATIONWIDE"
+          );
           if (foundFeat) nationwide = foundFeat.properties;
         }
+        // ------------------------------------------
 
         if (nationwide) {
           let sp = Number(nationwide.strike_percent);
