@@ -255,8 +255,9 @@
             if (f.properties.region) f.properties.region = f.properties.region.toString().trim().toUpperCase();
             if (f.properties.name) f.properties.name = f.properties.name.toString().trim().toUpperCase();
             if (f.properties.strike_percent !== undefined && f.properties.strike_percent !== null) {
-              // leave numeric value as-is; popup/legend will scale display
-              f.properties.strike_percent = Number(f.properties.strike_percent);
+              let sp = Number(f.properties.strike_percent);
+              if (sp > 0 && sp < 0.5) sp = sp * 100;
+              f.properties.strike_percent = sp;
             }
             if (f.properties.adjusted_output !== undefined && f.properties.adjusted_output !== null) {
               f.properties.adjusted_output = Number(f.properties.adjusted_output);
@@ -302,7 +303,7 @@
             const p = e.features[0].properties || {};
             // adjust percent for display (if provided as fraction)
             let psp = p.strike_percent;
-            if (psp !== undefined && psp !== null && Math.abs(Number(psp)) < 1) psp = Number(psp) * 100;
+            
             popup.setLngLat(e.lngLat)
               .setHTML(`
                 <strong>${p.region || p.name || "REGION"}</strong><br/>
